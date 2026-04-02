@@ -1,570 +1,585 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CCRIP – Cloud Credential Risk Intelligence Platform</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>CCRIP — Cloud Credential Risk Intelligence Platform</title>
   <style>
-    /* ── Reset & base ─────────────────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0d1117;--surface:#161b22;--surface2:#1c2430;--border:#30363d;
+      --text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;
+      --green:#3fb950;--yellow:#d29922;--orange:#f0883e;--red:#f85149;--critical:#ff6b6b;
+      --radius:10px;
+    }
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 
-    :root {
-      --bg:         #0d1117;
-      --surface:    #161b22;
-      --surface2:   #1c2430;
-      --border:     #30363d;
-      --text:       #e6edf3;
-      --muted:      #8b949e;
-      --accent:     #58a6ff;
-      --green:      #3fb950;
-      --yellow:     #d29922;
-      --orange:     #f0883e;
-      --red:        #f85149;
-      --critical:   #ff6b6b;
-      --radius:     10px;
-    }
+    /* Header */
+    header{background:linear-gradient(135deg,#0d1117,#161b22);border-bottom:1px solid var(--border);padding:18px 32px;display:flex;align-items:center;gap:14px}
+    header .logo{font-size:28px}
+    header h1{font-size:19px;font-weight:700}
+    header h1 span{color:var(--accent)}
+    header p{font-size:12px;color:var(--muted);margin-top:2px}
+    .badge{margin-left:auto;background:#1f2d3d;border:1px solid var(--accent);color:var(--accent);font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px}
 
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
+    /* Main */
+    main{max-width:1100px;margin:28px auto;padding:0 20px;display:grid;gap:20px}
 
-    /* ── Header ──────────────────────────────────────────────────────── */
-    header {
-      background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
-      border-bottom: 1px solid var(--border);
-      padding: 20px 32px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-    header .logo {
-      font-size: 28px;
-    }
-    header h1 {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: .4px;
-    }
-    header h1 span {
-      color: var(--accent);
-    }
-    header p {
-      font-size: 13px;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-    .badge {
-      margin-left: auto;
-      background: #1f2d3d;
-      border: 1px solid var(--accent);
-      color: var(--accent);
-      font-size: 11px;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 20px;
-      letter-spacing: .5px;
-    }
+    /* Card */
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px}
+    .card-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:16px;display:flex;align-items:center;gap:8px}
 
-    /* ── Layout ──────────────────────────────────────────────────────── */
-    main {
-      max-width: 1100px;
-      margin: 32px auto;
-      padding: 0 20px;
-      display: grid;
-      gap: 24px;
-    }
+    /* Form */
+    .form-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:end}
+    @media(max-width:700px){.form-row{grid-template-columns:1fr}}
+    .field label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+    .field input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;padding:10px 12px;outline:none;transition:border-color .2s;font-family:'Consolas',monospace}
+    .field input:focus{border-color:var(--accent)}
+    .field input::placeholder{color:#444d56}
+    .btn{padding:10px 22px;font-size:14px;font-weight:700;border:none;border-radius:8px;cursor:pointer;transition:opacity .2s}
+    .btn-primary{background:var(--accent);color:#0d1117}
+    .btn-primary:hover{opacity:.85}
+    .btn-primary:disabled{opacity:.35;cursor:not-allowed}
+    .btn-sm{padding:7px 14px;font-size:12px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;cursor:pointer}
+    .btn-sm:hover{border-color:var(--accent);color:var(--accent)}
 
-    /* ── Card ────────────────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
-    }
-    .card-title {
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--muted);
-      margin-bottom: 18px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .card-title .icon { font-size: 16px; }
+    /* Loader */
+    #loader{display:none;text-align:center;padding:48px;color:var(--muted)}
+    .spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+    @keyframes spin{to{transform:rotate(360deg)}}
 
-    /* ── Input form ──────────────────────────────────────────────────── */
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 16px;
-    }
-    @media(max-width: 700px) { .form-grid { grid-template-columns: 1fr; } }
+    /* Error */
+    #error-banner{display:none;background:#2d1515;border:1px solid var(--red);border-radius:var(--radius);padding:14px 18px;color:var(--red);font-size:14px;align-items:center;gap:10px}
 
-    .field label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-      margin-bottom: 6px;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-    }
-    .field input {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-size: 14px;
-      padding: 10px 12px;
-      outline: none;
-      transition: border-color .2s;
-      font-family: 'Consolas', monospace;
-    }
-    .field input:focus {
-      border-color: var(--accent);
-    }
-    .field input::placeholder { color: #444d56; }
+    /* Summary stats */
+    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    @media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+    .stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center}
+    .stat-card .num{font-size:32px;font-weight:800;line-height:1}
+    .stat-card .lbl{font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+    .stat-card.active .num{color:var(--red)}
+    .stat-card.found  .num{color:var(--yellow)}
+    .stat-card.files  .num{color:var(--accent)}
+    .stat-card.branch .num{font-size:18px;color:var(--green)}
 
-    .btn-analyze {
-      margin-top: 20px;
-      width: 100%;
-      padding: 13px;
-      background: var(--accent);
-      color: #0d1117;
-      font-size: 15px;
-      font-weight: 700;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      letter-spacing: .5px;
-      transition: opacity .2s, transform .1s;
-    }
-    .btn-analyze:hover { opacity: .88; }
-    .btn-analyze:active { transform: scale(.98); }
-    .btn-analyze:disabled { opacity: .4; cursor: not-allowed; }
+    /* Overall risk */
+    .overall-risk{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+    .risk-badge-lg{padding:14px 28px;border-radius:10px;font-size:22px;font-weight:900;letter-spacing:1px;border:2px solid;min-width:150px;text-align:center}
+    .risk-badge-lg.LOW     {background:#0d2318;border-color:var(--green); color:var(--green)}
+    .risk-badge-lg.MEDIUM  {background:#2a1f00;border-color:var(--yellow);color:var(--yellow)}
+    .risk-badge-lg.HIGH    {background:#2a1500;border-color:var(--orange);color:var(--orange)}
+    .risk-badge-lg.CRITICAL{background:#2d0a0a;border-color:var(--critical);color:var(--critical)}
+    .risk-badge-sm{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px}
+    .risk-badge-sm.LOW     {background:#0d2318;color:var(--green)}
+    .risk-badge-sm.MEDIUM  {background:#2a1f00;color:var(--yellow)}
+    .risk-badge-sm.HIGH    {background:#2a1500;color:var(--orange)}
+    .risk-badge-sm.CRITICAL{background:#2d0a0a;color:var(--critical)}
+    .status-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+    .status-badge.ACTIVE   {background:#0d2318;color:var(--green)}
+    .status-badge.INACTIVE {background:#1a1a2e;color:var(--muted)}
+    .status-badge.NO_SECRET{background:#2a1f00;color:var(--yellow)}
 
-    /* ── Loader ──────────────────────────────────────────────────────── */
-    #loader {
-      display: none;
-      text-align: center;
-      padding: 40px;
-      color: var(--muted);
-    }
-    .spinner {
-      width: 40px; height: 40px;
-      border: 4px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .8s linear infinite;
-      margin: 0 auto 16px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Credential accordion */
+    .cred-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+    .cred-header{display:flex;align-items:center;gap:12px;padding:16px 20px;cursor:pointer;user-select:none}
+    .cred-header:hover{background:var(--surface2)}
+    .cred-key{font-family:'Consolas',monospace;font-size:14px;font-weight:700;color:var(--accent);flex:1}
+    .cred-body{display:none;border-top:1px solid var(--border)}
+    .cred-body.open{display:block}
+    .cred-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto}
+    .cred-tab{padding:10px 18px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+    .cred-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+    .cred-tab:hover{color:var(--text)}
+    .cred-panel{display:none;padding:18px 20px}
+    .cred-panel.active{display:block}
 
-    /* ── Error banner ────────────────────────────────────────────────── */
-    #error-banner {
-      display: none;
-      background: #2d1515;
-      border: 1px solid var(--red);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-      color: var(--red);
-      font-size: 14px;
-      display: none;
-      align-items: center;
-      gap: 10px;
-    }
-
-    /* ── Results ─────────────────────────────────────────────────────── */
-    #results { display: none; }
-
-    /* Risk hero */
-    .risk-hero {
-      display: flex;
-      align-items: center;
-      gap: 28px;
-      flex-wrap: wrap;
-    }
-    .risk-badge {
-      min-width: 140px;
-      text-align: center;
-      padding: 18px 24px;
-      border-radius: 10px;
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: 1px;
-      border: 2px solid;
-    }
-    .risk-badge.LOW      { background: #0d2318; border-color: var(--green);  color: var(--green); }
-    .risk-badge.MEDIUM   { background: #2a1f00; border-color: var(--yellow); color: var(--yellow); }
-    .risk-badge.HIGH     { background: #2a1500; border-color: var(--orange); color: var(--orange); }
-    .risk-badge.CRITICAL { background: #2d0a0a; border-color: var(--critical); color: var(--critical); }
-
-    .risk-meter { flex: 1; min-width: 220px; }
-    .risk-meter label {
-      font-size: 12px;
-      color: var(--muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: .5px;
-    }
-    .score-value {
-      font-size: 42px;
-      font-weight: 800;
-      line-height: 1;
-      margin: 6px 0 10px;
-    }
-    .score-value.LOW      { color: var(--green); }
-    .score-value.MEDIUM   { color: var(--yellow); }
-    .score-value.HIGH     { color: var(--orange); }
-    .score-value.CRITICAL { color: var(--critical); }
-
-    .progress-track {
-      height: 10px;
-      background: var(--surface2);
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      border-radius: 10px;
-      transition: width 1s ease;
-    }
-    .progress-fill.LOW      { background: var(--green); }
-    .progress-fill.MEDIUM   { background: var(--yellow); }
-    .progress-fill.HIGH     { background: var(--orange); }
-    .progress-fill.CRITICAL { background: linear-gradient(90deg, var(--red), var(--critical)); }
-
-    /* Recommendation box */
-    .rec-box {
-      margin-top: 20px;
-      background: var(--surface2);
-      border-left: 4px solid;
-      border-radius: 0 8px 8px 0;
-      padding: 14px 18px;
-      font-size: 14px;
-      line-height: 1.6;
-    }
-    .rec-box.LOW      { border-color: var(--green); }
-    .rec-box.MEDIUM   { border-color: var(--yellow); }
-    .rec-box.HIGH     { border-color: var(--orange); }
-    .rec-box.CRITICAL { border-color: var(--critical); }
-    .rec-box strong { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
-
-    /* Pills / tags */
-    .pill-list { display: flex; flex-wrap: wrap; gap: 8px; }
-    .pill {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 5px 14px;
-      font-size: 13px;
-      font-weight: 600;
-      font-family: 'Consolas', monospace;
-    }
-    .pill.perm  { border-color: #58a6ff44; color: var(--accent); }
-    .pill.log   { border-color: #3fb95044; color: var(--green); }
-    .pill.empty { color: var(--muted); font-style: italic; font-family: inherit; font-weight: 400; }
+    /* Pills */
+    .pill-list{display:flex;flex-wrap:wrap;gap:8px}
+    .pill{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;font-family:'Consolas',monospace;border:1px solid}
+    .pill.perm    {border-color:#58a6ff44;color:var(--accent);background:#1f2d3d}
+    .pill.log     {border-color:#3fb95044;color:var(--green);background:#0d2318}
+    .pill.intent  {border-color:#f0883e44;color:var(--orange);background:#2a1500}
+    .pill.empty   {border-color:var(--border);color:var(--muted);font-family:inherit;font-style:italic;font-weight:400}
 
     /* Attack cards */
-    .attack-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 12px;
-    }
-    .attack-card {
-      background: var(--surface2);
-      border: 1px solid #f8514922;
-      border-left: 4px solid var(--red);
-      border-radius: 8px;
-      padding: 14px 16px;
-    }
-    .attack-card h4 {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--red);
-      margin-bottom: 6px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .attack-card p {
-      font-size: 13px;
-      color: var(--muted);
-      line-height: 1.55;
-    }
+    .attack-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+    .attack-card{background:var(--surface2);border-left:4px solid var(--red);border:1px solid #f8514922;border-left:4px solid var(--red);border-radius:8px;padding:12px 14px}
+    .attack-card h4{font-size:13px;font-weight:700;color:var(--red);margin-bottom:5px}
+    .attack-card p{font-size:12px;color:var(--muted);line-height:1.5}
 
-    /* Two-column results layout */
-    .results-cols {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-    }
-    @media(max-width: 700px) { .results-cols { grid-template-columns: 1fr; } }
+    /* Timeline */
+    .timeline{display:grid;gap:8px}
+    .tl-item{display:flex;align-items:flex-start;gap:12px;font-size:13px}
+    .tl-step{min-width:26px;height:26px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}
+    .tl-action{font-family:'Consolas',monospace;color:var(--accent)}
+    .tl-phase{font-size:11px;color:var(--muted);margin-top:1px}
+
+    /* Anomalies */
+    .anomaly{background:#2d1515;border-left:4px solid var(--red);border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#f8888a;line-height:1.5}
+
+    /* Remediation steps */
+    .steps-list{display:grid;gap:8px}
+    .step-item{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.55}
+    .step-num{min-width:22px;height:22px;border-radius:50%;background:var(--accent);color:#0d1117;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:1px}
+    .dep-warning{background:#2a1500;border-left:4px solid var(--orange);border-radius:0 6px 6px 0;padding:12px 14px;font-size:13px;color:var(--orange);line-height:1.5;margin-bottom:12px}
+    .priority-badge{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-size:13px;font-weight:700;display:inline-block;margin-bottom:14px}
+
+    /* Code snippet */
+    .code-block{background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:12px;font-family:'Consolas',monospace;font-size:12px;line-height:1.6;overflow-x:auto;white-space:pre;color:#a5d6ff}
+    .file-tag{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 10px;font-size:12px;font-family:'Consolas',monospace;color:var(--muted);display:inline-block;margin-bottom:8px}
+    .line-tag{color:var(--yellow);font-weight:700}
+
+    /* Validation info */
+    .info-grid{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px}
+    .info-label{color:var(--muted);font-weight:600}
+    .info-value{font-family:'Consolas',monospace;color:var(--text)}
+
+    /* Correlation */
+    .shared-risk{background:#2d1515;border-left:4px solid var(--red);border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#f8888a;line-height:1.5}
+
+    /* Results hidden by default */
+    #results{display:none}
 
     /* Footer */
-    footer {
-      text-align: center;
-      color: var(--muted);
-      font-size: 12px;
-      padding: 32px 20px;
-      border-top: 1px solid var(--border);
-      margin-top: 20px;
-    }
+    footer{text-align:center;color:var(--muted);font-size:12px;padding:28px 20px;border-top:1px solid var(--border);margin-top:8px}
+
+    /* Section label */
+    .section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:12px}
   </style>
 </head>
 <body>
 
-<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<!-- Header -->
 <header>
-  <div class="logo">🔐</div>
+  <div class="logo"></div>
   <div>
     <h1><span>CCRIP</span> — Cloud Credential Risk Intelligence Platform</h1>
-    <p>Analyze leaked AWS credentials · Detect attack paths · Score risk severity</p>
+    <p>Scan GitHub repositories for leaked AWS credentials  Detect attack paths  Score risk severity</p>
   </div>
   <div class="badge">MSc Project</div>
 </header>
 
-<!-- ── Main ──────────────────────────────────────────────────────────────── -->
 <main>
 
   <!-- Input card -->
   <div class="card">
-    <div class="card-title"><span class="icon">🔑</span> Credential Input</div>
-    <div class="form-grid">
-      <div class="field">
-        <label>AWS Access Key ID</label>
-        <input id="access_key" type="text" placeholder="AKIAIOSFODNN7EXAMPLE" autocomplete="off" spellcheck="false" />
+    <div class="card-title"> Repository Scanner</div>
+    <div class="form-row">
+      <div class="field" style="flex:1">
+        <label>GitHub Repository URL</label>
+        <input id="repo_url" type="url" placeholder="https://github.com/owner/repo" autocomplete="off" spellcheck="false"/>
       </div>
       <div class="field">
-        <label>AWS Secret Access Key</label>
-        <input id="secret_key" type="password" placeholder="wJalrXUtnFEMI/K7MDENG..." autocomplete="off" />
+        <label>GitHub Token (optional)</label>
+        <input id="github_token" type="password" placeholder="ghp_... (raises rate limit)" style="width:220px"/>
       </div>
       <div class="field">
-        <label>IAM Username</label>
-        <input id="username" type="text" placeholder="john-dev" autocomplete="off" />
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" id="scanBtn" onclick="runScan()"> &nbsp;Scan Repo</button>
       </div>
     </div>
-    <button class="btn-analyze" id="analyzeBtn" onclick="runAnalysis()">
-      🔍 &nbsp; Analyze Credential
-    </button>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px">
+       Only public GitHub repositories are supported.<br>
+      The scanner looks for AWS access keys (<code style="color:var(--accent)">AKIA.../ASIA...</code>) hardcoded in source files.
+    </p>
   </div>
 
   <!-- Loader -->
   <div id="loader">
     <div class="spinner"></div>
-    <p>Connecting to AWS and analyzing credential…</p>
+    <p id="loader-msg">Scanning repository for leaked credentials</p>
   </div>
 
   <!-- Error banner -->
   <div id="error-banner">
-    <span style="font-size:18px">⚠️</span>
+    <span style="font-size:18px"></span>
     <span id="error-text"></span>
   </div>
 
   <!-- Results -->
   <div id="results">
 
-    <!-- Risk summary -->
+    <!-- Scan summary -->
     <div class="card">
-      <div class="card-title"><span class="icon">🚨</span> Risk Assessment</div>
-      <div class="risk-hero">
-        <div class="risk-badge" id="riskBadge">—</div>
-        <div class="risk-meter">
-          <label>Risk Score</label>
-          <div class="score-value" id="scoreValue">0</div>
-          <div class="progress-track">
-            <div class="progress-fill" id="progressFill" style="width:0%"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-top:4px">
-            <span style="font-size:11px;color:var(--muted)">0 — Low</span>
-            <span style="font-size:11px;color:var(--muted)">100 — Critical</span>
-          </div>
+      <div class="card-title"> Scan Summary</div>
+      <div class="stats-grid">
+        <div class="stat-card files">
+          <div class="num" id="stat-files">0</div>
+          <div class="lbl">Files Scanned</div>
+        </div>
+        <div class="stat-card found">
+          <div class="num" id="stat-found">0</div>
+          <div class="lbl">Credentials Found</div>
+        </div>
+        <div class="stat-card active">
+          <div class="num" id="stat-active">0</div>
+          <div class="lbl">Still Active</div>
+        </div>
+        <div class="stat-card branch">
+          <div class="num" id="stat-branch">main</div>
+          <div class="lbl">Branch Scanned</div>
         </div>
       </div>
-      <div class="rec-box" id="recBox">
-        <strong>Recommended Action</strong>
-        <span id="recText"></span>
-      </div>
     </div>
 
-    <!-- Permissions + Activity -->
-    <div class="results-cols">
-      <div class="card">
-        <div class="card-title"><span class="icon">🛡️</span> IAM Permissions Detected</div>
-        <div class="pill-list" id="permsList"></div>
-      </div>
-      <div class="card">
-        <div class="card-title"><span class="icon">📋</span> Observed Activity (Logs)</div>
-        <div class="pill-list" id="activityList"></div>
-      </div>
-    </div>
-
-    <!-- Attack paths -->
+    <!-- Overall risk -->
     <div class="card">
-      <div class="card-title"><span class="icon">⚔️</span> Possible Attack Paths</div>
-      <div class="attack-grid" id="attackGrid"></div>
+      <div class="card-title"> Overall Repository Risk</div>
+      <div class="overall-risk">
+        <div class="risk-badge-lg" id="overall-badge">LOW</div>
+        <p id="overall-desc" style="font-size:14px;color:var(--muted);line-height:1.6;max-width:600px"></p>
+      </div>
+    </div>
+
+    <!-- Credential cards -->
+    <div>
+      <div class="section-label"> Leaked Credentials — Detailed Analysis</div>
+      <div id="cred-list"></div>
+    </div>
+
+    <!-- Correlation -->
+    <div class="card" id="correlation-card" style="display:none">
+      <div class="card-title"> Correlation Engine</div>
+      <p id="corr-summary" style="font-size:14px;margin-bottom:14px;color:var(--muted)"></p>
+      <div id="corr-risks"></div>
     </div>
 
   </div><!-- /results -->
-
 </main>
 
 <footer>
-  CCRIP &nbsp;·&nbsp; Cloud Credential Risk Intelligence Platform &nbsp;·&nbsp; MSc Project &nbsp;·&nbsp;
-  Never store real credentials in source code &nbsp;·&nbsp; IAM data fetched via read-only boto3 call
+  CCRIP  Cloud Credential Risk Intelligence Platform  MSc Project 
+  Never commit AWS credentials to source control  Scan powered by regex pattern matching
 </footer>
 
-<!-- ── Script ─────────────────────────────────────────────────────────────── -->
 <script>
-  const API = 'http://127.0.0.1:5000/analyze';
+const API = 'http://127.0.0.1:5000/scan';
 
-  async function runAnalysis() {
-    const accessKey = document.getElementById('access_key').value.trim();
-    const secretKey = document.getElementById('secret_key').value.trim();
-    const username  = document.getElementById('username').value.trim();
+async function runScan() {
+  const repoUrl    = document.getElementById('repo_url').value.trim();
+  const token      = document.getElementById('github_token').value.trim();
 
-    // ── Basic client-side validation ───────────────────────────────────
-    if (!accessKey || !secretKey || !username) {
-      showError('Please fill in all three fields before analyzing.');
-      return;
-    }
-
-    // ── Reset UI ───────────────────────────────────────────────────────
-    hideError();
-    showLoader(true);
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('analyzeBtn').disabled = true;
-
-    // ── Call the backend ───────────────────────────────────────────────
-    try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          access_key: accessKey,
-          secret_key: secretKey,
-          username:   username
-        })
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        showError(data.error || `Server error ${res.status}`);
-        return;
-      }
-
-      renderResults(data);
-
-    } catch (err) {
-      showError('Could not reach the backend. Make sure the Flask server is running on http://127.0.0.1:5000');
-    } finally {
-      showLoader(false);
-      document.getElementById('analyzeBtn').disabled = false;
-    }
+  if (!repoUrl) { showError('Please enter a GitHub repository URL.'); return; }
+  if (!repoUrl.startsWith('https://github.com/')) {
+    showError("URL must start with 'https://github.com/'"); return;
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────
-  function renderResults(data) {
-    const level = data.risk_level;
-    const score = data.risk_score;
+  hideError();
+  showLoader(true, 'Cloning file tree and scanning for credentials');
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('scanBtn').disabled = true;
 
-    // Risk badge
-    const badge = document.getElementById('riskBadge');
-    badge.textContent = level;
-    badge.className = `risk-badge ${level}`;
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ repo_url: repoUrl, github_token: token || undefined })
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error || `Server error ${res.status}`); return; }
+    renderResults(data);
+  } catch(e) {
+    showError('Could not reach the Flask server. Make sure python app.py is running on http://127.0.0.1:5000');
+  } finally {
+    showLoader(false);
+    document.getElementById('scanBtn').disabled = false;
+  }
+}
 
-    // Score + progress
-    const sv = document.getElementById('scoreValue');
-    sv.textContent = score;
-    sv.className = `score-value ${level}`;
+function renderResults(data) {
+  // Summary stats
+  const s = data.scan_summary;
+  document.getElementById('stat-files').textContent  = s.files_scanned;
+  document.getElementById('stat-found').textContent  = s.credentials_found;
+  document.getElementById('stat-active').textContent = s.active_credentials;
+  document.getElementById('stat-branch').textContent = s.branch;
 
-    const pf = document.getElementById('progressFill');
-    pf.style.width = '0%';
-    pf.className = `progress-fill ${level}`;
-    setTimeout(() => { pf.style.width = score + '%'; }, 50);
+  // Overall risk
+  const level = data.overall_risk;
+  const ob = document.getElementById('overall-badge');
+  ob.textContent  = level;
+  ob.className    = 'risk-badge-lg ' + level;
+  document.getElementById('overall-desc').textContent =
+    s.credentials_found === 0
+      ? 'No AWS credentials were detected in the scanned files.'
+      : OVERALL_DESC[level] || '';
 
-    // Recommendation
-    document.getElementById('recText').textContent = data.recommendation;
-    document.getElementById('recBox').className = `rec-box ${level}`;
-
-    // Permissions
-    const permsList = document.getElementById('permsList');
-    permsList.innerHTML = '';
-    if (data.permissions.length === 0) {
-      permsList.innerHTML = '<span class="pill empty">No permissions detected</span>';
-    } else {
-      data.permissions.forEach(p => {
-        permsList.innerHTML += `<span class="pill perm">${p}</span>`;
-      });
-    }
-
-    // Activity
-    const actList = document.getElementById('activityList');
-    actList.innerHTML = '';
-    if (data.activity.length === 0) {
-      actList.innerHTML = '<span class="pill empty">No activity found</span>';
-    } else {
-      data.activity.forEach(a => {
-        actList.innerHTML += `<span class="pill log">${a}</span>`;
-      });
-    }
-
-    // Attack paths
-    const grid = document.getElementById('attackGrid');
-    grid.innerHTML = '';
-    if (data.attack_paths.length === 0) {
-      grid.innerHTML = '<p style="color:var(--muted);font-size:14px">No attack paths identified.</p>';
-    } else {
-      data.attack_paths.forEach(ap => {
-        grid.innerHTML += `
-          <div class="attack-card">
-            <h4>⚡ ${escHtml(ap.attack)}</h4>
-            <p>${escHtml(ap.description)}</p>
-          </div>`;
-      });
-    }
-
-    document.getElementById('results').style.display = 'block';
-    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+  // Credential cards
+  const list = document.getElementById('cred-list');
+  list.innerHTML = '';
+  if (data.credentials.length === 0) {
+    list.innerHTML = `<div class="card" style="text-align:center;padding:40px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:12px"></div>
+      <div style="font-size:15px">No AWS credentials found in this repository.</div>
+    </div>`;
+  } else {
+    data.credentials.forEach((cred, i) => list.appendChild(buildCredCard(cred, i)));
   }
 
-  // ── Helpers ────────────────────────────────────────────────────────────
-  function showLoader(on) {
-    document.getElementById('loader').style.display = on ? 'block' : 'none';
+  // Correlation
+  const corr = data.correlation;
+  if (corr && corr.shared_risks && corr.shared_risks.length > 0) {
+    document.getElementById('corr-summary').textContent = corr.summary;
+    const risks = document.getElementById('corr-risks');
+    risks.innerHTML = '';
+    corr.shared_risks.forEach(r => {
+      risks.innerHTML += `<div class="shared-risk"> ${esc(r)}</div>`;
+    });
+    document.getElementById('correlation-card').style.display = 'block';
+  } else {
+    document.getElementById('correlation-card').style.display = 'none';
   }
 
-  function showError(msg) {
-    const el = document.getElementById('error-banner');
-    document.getElementById('error-text').textContent = msg;
-    el.style.display = 'flex';
-  }
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({behavior:'smooth'});
+}
 
-  function hideError() {
-    document.getElementById('error-banner').style.display = 'none';
-  }
+const OVERALL_DESC = {
+  CRITICAL: 'CRITICAL risk detected. One or more active credentials have severe permissions. Immediate action required.',
+  HIGH:     'HIGH risk. Credentials with significant permissions were found. Review and rotate within 24 hours.',
+  MEDIUM:   'MEDIUM risk. Credentials detected with moderate permissions. Review and rotate soon.',
+  LOW:      'LOW risk. Credentials found but appear inactive or have limited permissions.',
+};
 
-  // Prevent XSS when injecting API response text into the DOM
-  function escHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
+function buildCredCard(cred, idx) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cred-card';
+  const status = cred.validation.status;
+  const masked = cred.access_key.substring(0,4) + '...' + cred.access_key.slice(-4);
 
-  // Allow pressing Enter in any field to trigger analysis
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Enter') runAnalysis();
-  });
+  wrap.innerHTML = `
+    <div class="cred-header" onclick="toggleCred(${idx})">
+      <span style="font-size:18px">${status==='ACTIVE'?'':''}</span>
+      <div class="cred-key">${esc(cred.access_key)}</div>
+      <span class="status-badge ${esc(status)}">${esc(status)}</span>
+      <span class="risk-badge-sm ${esc(cred.risk_level)}">${esc(cred.risk_level)}</span>
+      <span style="font-size:18px;color:var(--muted);margin-left:8px" id="arrow-${idx}"></span>
+    </div>
+    <div class="cred-body" id="body-${idx}">
+      <div class="cred-tabs">
+        <div class="cred-tab active" onclick="showTab(${idx},'loc',this)"> Location</div>
+        <div class="cred-tab" onclick="showTab(${idx},'val',this)"> Validation</div>
+        <div class="cred-tab" onclick="showTab(${idx},'perm',this)"> Permissions</div>
+        <div class="cred-tab" onclick="showTab(${idx},'intel',this)"> Intelligence</div>
+        <div class="cred-tab" onclick="showTab(${idx},'attack',this)"> Attacks</div>
+        <div class="cred-tab" onclick="showTab(${idx},'risk',this)"> Risk</div>
+        <div class="cred-tab" onclick="showTab(${idx},'decision',this)"> Decision</div>
+      </div>
+
+      <!-- Location tab -->
+      <div class="cred-panel active" id="tab-${idx}-loc">
+        ${buildLocationPanel(cred)}
+      </div>
+
+      <!-- Validation tab -->
+      <div class="cred-panel" id="tab-${idx}-val">
+        ${buildValidationPanel(cred)}
+      </div>
+
+      <!-- Permissions tab -->
+      <div class="cred-panel" id="tab-${idx}-perm">
+        ${buildPermissionsPanel(cred)}
+      </div>
+
+      <!-- Intelligence tab -->
+      <div class="cred-panel" id="tab-${idx}-intel">
+        ${buildIntelPanel(cred)}
+      </div>
+
+      <!-- Attack paths tab -->
+      <div class="cred-panel" id="tab-${idx}-attack">
+        ${buildAttackPanel(cred)}
+      </div>
+
+      <!-- Risk tab -->
+      <div class="cred-panel" id="tab-${idx}-risk">
+        ${buildRiskPanel(cred)}
+      </div>
+
+      <!-- Decision tab -->
+      <div class="cred-panel" id="tab-${idx}-decision">
+        ${buildDecisionPanel(cred)}
+      </div>
+    </div>`;
+  return wrap;
+}
+
+function buildLocationPanel(cred) {
+  if (!cred.occurrences || cred.occurrences.length === 0)
+    return '<p style="color:var(--muted)">No location data.</p>';
+  return cred.occurrences.map(o => `
+    <div style="margin-bottom:16px">
+      <span class="file-tag"> ${esc(o.file_path)}</span>
+      <span class="line-tag" style="margin-left:8px;font-family:Consolas">Line ${o.line_number}</span>
+      <div class="code-block">${esc(o.context)}</div>
+    </div>`).join('');
+}
+
+function buildValidationPanel(cred) {
+  const v = cred.validation;
+  const statusColor = v.status==='ACTIVE'?'var(--red)':v.status==='INACTIVE'?'var(--muted)':'var(--yellow)';
+  return `
+    <div class="info-grid">
+      <span class="info-label">Status</span>
+      <span style="font-weight:700;color:${statusColor}">${esc(v.status)}</span>
+      <span class="info-label">Reason</span>
+      <span class="info-value" style="font-family:inherit">${esc(v.reason||'—')}</span>
+      <span class="info-label">Account ID</span>
+      <span class="info-value">${esc(v.account_id||'—')}</span>
+      <span class="info-label">IAM ARN</span>
+      <span class="info-value" style="word-break:break-all">${esc(v.arn||'—')}</span>
+      <span class="info-label">User ID</span>
+      <span class="info-value">${esc(v.user_id||'—')}</span>
+      <span class="info-label">Has Secret Key</span>
+      <span class="info-value">${cred.has_secret?'Yes (found in repo)':'No (not detected)'}</span>
+    </div>`;
+}
+
+function buildPermissionsPanel(cred) {
+  const perms = cred.permissions || [];
+  const act   = cred.activity    || [];
+  return `
+    <div style="margin-bottom:16px">
+      <div class="section-label">IAM Permissions (from AWS)</div>
+      <div class="pill-list">${perms.length
+        ? perms.map(p=>`<span class="pill perm">${esc(p)}</span>`).join('')
+        : '<span class="pill empty">No permissions — key inactive or IAM access denied</span>'}</div>
+    </div>
+    <div>
+      <div class="section-label">Observed Activity (CloudTrail logs)</div>
+      <div class="pill-list">${act.map(a=>`<span class="pill log">${esc(a)}</span>`).join('')}</div>
+    </div>`;
+}
+
+function buildIntelPanel(cred) {
+  const intel = cred.intelligence || {};
+  const intentHtml = (intel.intent||[]).map(i=>`<span class="pill intent">${esc(i)}</span>`).join('');
+  const anomalyHtml = (intel.anomalies||[]).map(a=>`<div class="anomaly"> ${esc(a)}</div>`).join('');
+  const tlHtml = (intel.timeline||[]).map(t=>`
+    <div class="tl-item">
+      <div class="tl-step">${t.step}</div>
+      <div>
+        <div class="tl-action">${esc(t.action)}</div>
+        <div class="tl-phase">${esc(t.phase)}</div>
+      </div>
+    </div>`).join('');
+  return `
+    <div style="margin-bottom:16px">
+      <div class="section-label">Detected Intent</div>
+      <div class="pill-list">${intentHtml||'<span class="pill empty">None detected</span>'}</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="section-label">Anomalies</div>
+      ${anomalyHtml||'<p style="color:var(--muted);font-size:13px">No anomalies detected.</p>'}
+    </div>
+    <div>
+      <div class="section-label">Activity Timeline</div>
+      <div class="timeline">${tlHtml}</div>
+    </div>`;
+}
+
+function buildAttackPanel(cred) {
+  const paths = cred.attack_paths || [];
+  if (!paths.length) return '<p style="color:var(--muted);font-size:13px">No attack paths identified.</p>';
+  return `<div class="attack-grid">${paths.map(ap=>`
+    <div class="attack-card">
+      <h4> ${esc(ap.attack)}</h4>
+      <p>${esc(ap.description)}</p>
+    </div>`).join('')}</div>`;
+}
+
+function buildRiskPanel(cred) {
+  const level = cred.risk_level;
+  const score = cred.risk_score;
+  const color = {LOW:'var(--green)',MEDIUM:'var(--yellow)',HIGH:'var(--orange)',CRITICAL:'var(--critical)'}[level]||'var(--muted)';
+  return `
+    <div style="display:flex;align-items:center;gap:24px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="text-align:center">
+        <div style="font-size:52px;font-weight:900;color:${color};line-height:1">${score}</div>
+        <div style="font-size:12px;color:var(--muted)">/ 100</div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:6px">Risk Level</div>
+        <div style="font-size:22px;font-weight:800;color:${color};margin-bottom:10px">${level}</div>
+        <div style="height:10px;background:var(--surface2);border-radius:10px;overflow:hidden">
+          <div id="prog-${cred.access_key}" style="height:100%;width:0;background:${color};border-radius:10px;transition:width 1s ease"></div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border-left:4px solid ${color};border-radius:0 6px 6px 0;padding:12px 16px;font-size:13px;line-height:1.6">
+      <strong style="display:block;font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Recommendation</strong>
+      ${esc(cred.recommendation)}
+    </div>`;
+}
+
+function buildDecisionPanel(cred) {
+  const d = cred.decision || {};
+  const steps = (d.remediation_steps||[]).slice(0,8);
+  const stepsHtml = steps.map((s,i)=>`
+    <div class="step-item">
+      <div class="step-num">${i+1}</div>
+      <div>${esc(s)}</div>
+    </div>`).join('');
+  const warn = d.dependency_warning
+    ? `<div class="dep-warning"> ${esc(d.dependency_warning)}</div>`
+    : '';
+  return `
+    <div class="priority-badge"> ${esc(d.priority||'P4 — Monitor')}</div>
+    ${warn}
+    <div class="section-label">Remediation Steps</div>
+    <div class="steps-list">${stepsHtml}</div>`;
+}
+
+function toggleCred(idx) {
+  const body  = document.getElementById('body-'+idx);
+  const arrow = document.getElementById('arrow-'+idx);
+  const open  = body.classList.toggle('open');
+  arrow.textContent = open ? '' : '';
+
+  // Animate progress bars when opened
+  if (open) {
+    const cred = _lastData.credentials[idx];
+    setTimeout(()=>{
+      const bar = document.getElementById('prog-'+cred.access_key);
+      if (bar) bar.style.width = cred.risk_score + '%';
+    }, 50);
+  }
+}
+
+function showTab(idx, name, el) {
+  // Deactivate all tabs and panels for this card
+  const card = document.getElementById('body-'+idx);
+  card.querySelectorAll('.cred-tab').forEach(t=>t.classList.remove('active'));
+  card.querySelectorAll('.cred-panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`tab-${idx}-${name}`).classList.add('active');
+}
+
+let _lastData = {};
+const _origRender = renderResults;
+window.renderResults = function(data) { _lastData = data; _origRender(data); };
+
+function showLoader(on, msg) {
+  document.getElementById('loader').style.display = on ? 'block' : 'none';
+  if (msg) document.getElementById('loader-msg').textContent = msg;
+}
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  document.getElementById('error-text').textContent = msg;
+  el.style.display = 'flex';
+}
+function hideError() {
+  document.getElementById('error-banner').style.display = 'none';
+}
+function esc(str) {
+  return String(str||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+document.getElementById('repo_url').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runScan();
+});
 </script>
-
 </body>
 </html>

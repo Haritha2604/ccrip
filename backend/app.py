@@ -1,64 +1,180 @@
-"""
+﻿"""
 app.py
 ------
-Flask entry-point for the Cloud Credential Risk Intelligence Platform.
+Flask entry-point for the Cloud Credential Risk Intelligence Platform (CCRIP).
 
-Single endpoint:  POST /analyze
-    Accepts an AWS access key, secret key, and IAM username.
-    Returns a JSON report covering permissions, observed activity,
-    possible attack paths, risk level, and a remediation recommendation.
+Endpoints:
+    POST /scan     -- New primary endpoint: scan a GitHub repo for leaked credentials
+    POST /analyze  -- Legacy: manual credential input (kept for backward compatibility)
+    GET  /health   -- Liveness check
 """
 
 import json
 import os
+from typing import Optional
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-from aws_connector import get_user_policies
+# Pipeline modules
+from scanner            import scan_github_repo
+from ingestion          import normalize_and_deduplicate
+from validator          import validate_credential
+from aws_connector      import get_user_policies
 from permission_analyzer import extract_permissions
-from attack_engine import simulate_attacks
-from risk_engine import calculate_risk
+from intelligence       import analyze_intelligence
+from attack_engine      import simulate_attacks
+from correlation        import correlate_credentials
+from risk_engine        import calculate_risk
+from decision_engine    import make_decision
 
-# ── App setup ──────────────────────────────────────────────────────────────────
-
+# App setup
 app = Flask(__name__)
-CORS(app)  # Allow requests from the frontend HTML file
+CORS(app)
 
-# Load mock activity logs once at startup (avoids repeated disk reads)
-_MOCK_LOGS_PATH = os.path.join(os.path.dirname(__file__), "mock_logs.json")
-
-with open(_MOCK_LOGS_PATH, encoding="utf-8") as _f:
+# Load mock CloudTrail activity once at startup
+_LOGS_PATH = os.path.join(os.path.dirname(__file__), "mock_logs.json")
+with open(_LOGS_PATH, encoding="utf-8") as _f:
     MOCK_ACTIVITY: list[str] = json.load(_f)
 
+_RISK_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+
+def _username_from_arn(arn: Optional[str]) -> Optional[str]:
+    """Extract IAM username from arn:aws:iam::123:user/john-dev -> john-dev"""
+    if not arn or ":user/" not in arn:
+        return None
+    return arn.split(":user/")[-1]
+
+
+def _analyze_credential(access_key: str, secret_key: Optional[str], occurrences: list[dict]) -> dict:
+    """Run the full analysis pipeline on a single credential."""
+
+    # Validation
+    validation = validate_credential(access_key, secret_key)
+
+    # Enrichment (IAM policies, only for ACTIVE credentials)
+    permissions: list[str] = []
+    if validation["status"] == "ACTIVE" and secret_key:
+        username = _username_from_arn(validation.get("arn"))
+        if username:
+            try:
+                policy_docs = get_user_policies(access_key, secret_key, username)
+                permissions = extract_permissions(policy_docs)
+            except ValueError:
+                permissions = []
+
+    # Activity (mock CloudTrail)
+    activity = MOCK_ACTIVITY
+
+    # Intelligence Analysis
+    intelligence = analyze_intelligence(activity)
+
+    # Attack Simulation
+    attack_paths = simulate_attacks(permissions, activity)
+
+    # Risk Scoring
+    risk = calculate_risk(permissions, activity)
+
+    # Adjust risk down for inactive credentials
+    if validation["status"] == "INACTIVE":
+        risk["score"]          = max(10, risk["score"] - 30)
+        risk["level"]          = "LOW" if risk["score"] < 15 else risk["level"]
+        risk["recommendation"] = (
+            "This key appears to be inactive or already revoked. "
+            "Verify it is fully deleted and remove it from the codebase."
+        )
+
+    # Decision
+    decision = make_decision(risk["level"], validation, attack_paths)
+
+    return {
+        "access_key":     access_key,
+        "has_secret":     bool(secret_key),
+        "occurrences":    occurrences,
+        "validation":     validation,
+        "permissions":    permissions,
+        "activity":       activity,
+        "intelligence":   intelligence,
+        "attack_paths":   attack_paths,
+        "risk_score":     risk["score"],
+        "risk_level":     risk["level"],
+        "recommendation": risk["recommendation"],
+        "decision":       decision,
+    }
+
+
+@app.post("/scan")
+def scan():
+    """
+    POST /scan
+    Input:  { "repo_url": "https://github.com/owner/repo", "github_token": "..." }
+    Output: Full risk intelligence report for all leaked credentials found.
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be JSON."}), 400
+
+    repo_url     = (body.get("repo_url")     or "").strip()
+    github_token = (body.get("github_token") or "").strip() or None
+
+    if not repo_url:
+        return jsonify({"error": "'repo_url' is required."}), 400
+
+    if not repo_url.startswith("https://github.com/"):
+        return jsonify({"error": "Only GitHub repositories are supported. URL must start with 'https://github.com/'."}), 400
+
+    # Step 1: Scan
+    try:
+        scan_result = scan_github_repo(repo_url, github_token)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Scan failed: {exc}"}), 500
+
+    # Step 2: Ingestion
+    records = normalize_and_deduplicate(scan_result["credentials"])
+
+    # Steps 3-10: Analyze each credential
+    analyzed: list[dict] = []
+    for record in records:
+        result = _analyze_credential(
+            access_key=record.access_key,
+            secret_key=record.secret_key,
+            occurrences=record.occurrences,
+        )
+        analyzed.append(result)
+
+    # Step 11: Correlation
+    correlation = correlate_credentials(analyzed)
+
+    # Overall risk
+    overall_risk = "LOW"
+    for cred in analyzed:
+        level = cred["risk_level"]
+        if _RISK_ORDER.index(level) > _RISK_ORDER.index(overall_risk):
+            overall_risk = level
+
+    active_count = sum(1 for c in analyzed if c["validation"]["status"] == "ACTIVE")
+
+    return jsonify({
+        "repo": repo_url,
+        "scan_summary": {
+            "branch":             scan_result["branch"],
+            "files_scanned":      scan_result["files_scanned"],
+            "credentials_found":  len(records),
+            "active_credentials": active_count,
+        },
+        "overall_risk": overall_risk,
+        "credentials":  analyzed,
+        "correlation":  correlation,
+    }), 200
+
 
 @app.post("/analyze")
 def analyze():
-    """
-    POST /analyze
-    -------------
-    Request body (JSON):
-        {
-            "access_key": "AKIA...",
-            "secret_key": "...",
-            "username":   "john-dev"
-        }
-
-    Response (JSON):
-        {
-            "permissions":      ["IAM_ACCESS", "S3_ACCESS"],
-            "activity":         ["s3:ListBucket", "iam:CreateUser"],
-            "attack_paths":     [{"attack": "...", "description": "..."}],
-            "risk_score":       85,
-            "risk_level":       "CRITICAL",
-            "recommendation":   "Disable this key immediately ..."
-        }
-    """
+    """Legacy endpoint - manual credential input."""
     body = request.get_json(silent=True)
-
-    # ── Input validation ───────────────────────────────────────────────────────
     if not body:
         return jsonify({"error": "Request body must be JSON."}), 400
 
@@ -67,35 +183,21 @@ def analyze():
     username   = (body.get("username")   or "").strip()
 
     if not access_key or not secret_key or not username:
-        return jsonify({
-            "error": "Fields 'access_key', 'secret_key', and 'username' are all required."
-        }), 400
+        return jsonify({"error": "Fields 'access_key', 'secret_key', and 'username' are required."}), 400
 
-    # Basic sanity check — AWS access keys always start with "AKIA" or "ASIA"
     if not (access_key.startswith("AKIA") or access_key.startswith("ASIA")):
-        return jsonify({
-            "error": "The access_key does not look like a valid AWS access key."
-        }), 400
+        return jsonify({"error": "The access_key does not look like a valid AWS access key."}), 400
 
-    # ── Step 1: Fetch IAM policies from AWS ────────────────────────────────────
     try:
-        policy_documents = get_user_policies(access_key, secret_key, username)
+        policy_docs = get_user_policies(access_key, secret_key, username)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 401
 
-    # ── Step 2: Convert policies to permission labels ──────────────────────────
-    permissions = extract_permissions(policy_documents)
-
-    # ── Step 3: Use mock logs as the activity feed ────────────────────────────
-    activity = MOCK_ACTIVITY
-
-    # ── Step 4: Simulate attack paths ─────────────────────────────────────────
+    permissions  = extract_permissions(policy_docs)
+    activity     = MOCK_ACTIVITY
     attack_paths = simulate_attacks(permissions, activity)
+    risk         = calculate_risk(permissions, activity)
 
-    # ── Step 5: Calculate risk ─────────────────────────────────────────────────
-    risk = calculate_risk(permissions, activity)
-
-    # ── Step 6: Build and return the response ─────────────────────────────────
     return jsonify({
         "permissions":    permissions,
         "activity":       activity,
@@ -108,12 +210,8 @@ def analyze():
 
 @app.get("/health")
 def health():
-    """Simple liveness check — useful for smoke-testing the server."""
     return jsonify({"status": "ok"}), 200
 
 
-# ── Dev server ─────────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
-    # debug=True is fine for local development; never use it in production
     app.run(debug=True, host="127.0.0.1", port=5000)
