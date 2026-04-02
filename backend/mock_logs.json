@@ -1,0 +1,7 @@
+[
+  "s3:ListBucket",
+  "s3:GetObject",
+  "iam:CreateUser",
+  "iam:AttachUserPolicy",
+  "ec2:DescribeInstances"
+]

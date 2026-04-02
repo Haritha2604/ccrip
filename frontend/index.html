@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCRIP – Cloud Credential Risk Intelligence Platform</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0d1117;
+      --surface:    #161b22;
+      --surface2:   #1c2430;
+      --border:     #30363d;
+      --text:       #e6edf3;
+      --muted:      #8b949e;
+      --accent:     #58a6ff;
+      --green:      #3fb950;
+      --yellow:     #d29922;
+      --orange:     #f0883e;
+      --red:        #f85149;
+      --critical:   #ff6b6b;
+      --radius:     10px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────── */
+    header {
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    header .logo {
+      font-size: 28px;
+    }
+    header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: .4px;
+    }
+    header h1 span {
+      color: var(--accent);
+    }
+    header p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .badge {
+      margin-left: auto;
+      background: #1f2d3d;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      letter-spacing: .5px;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────────────── */
+    main {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 20px;
+      display: grid;
+      gap: 24px;
+    }
+
+    /* ── Card ────────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title .icon { font-size: 16px; }
+
+    /* ── Input form ──────────────────────────────────────────────────── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+    }
+    @media(max-width: 700px) { .form-grid { grid-template-columns: 1fr; } }
+
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .field input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color .2s;
+      font-family: 'Consolas', monospace;
+    }
+    .field input:focus {
+      border-color: var(--accent);
+    }
+    .field input::placeholder { color: #444d56; }
+
+    .btn-analyze {
+      margin-top: 20px;
+      width: 100%;
+      padding: 13px;
+      background: var(--accent);
+      color: #0d1117;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      letter-spacing: .5px;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn-analyze:hover { opacity: .88; }
+    .btn-analyze:active { transform: scale(.98); }
+    .btn-analyze:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Loader ──────────────────────────────────────────────────────── */
+    #loader {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 4px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error banner ────────────────────────────────────────────────── */
+    #error-banner {
+      display: none;
+      background: #2d1515;
+      border: 1px solid var(--red);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      color: var(--red);
+      font-size: 14px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ── Results ─────────────────────────────────────────────────────── */
+    #results { display: none; }
+
+    /* Risk hero */
+    .risk-hero {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      flex-wrap: wrap;
+    }
+    .risk-badge {
+      min-width: 140px;
+      text-align: center;
+      padding: 18px 24px;
+      border-radius: 10px;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      border: 2px solid;
+    }
+    .risk-badge.LOW      { background: #0d2318; border-color: var(--green);  color: var(--green); }
+    .risk-badge.MEDIUM   { background: #2a1f00; border-color: var(--yellow); color: var(--yellow); }
+    .risk-badge.HIGH     { background: #2a1500; border-color: var(--orange); color: var(--orange); }
+    .risk-badge.CRITICAL { background: #2d0a0a; border-color: var(--critical); color: var(--critical); }
+
+    .risk-meter { flex: 1; min-width: 220px; }
+    .risk-meter label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .score-value {
+      font-size: 42px;
+      font-weight: 800;
+      line-height: 1;
+      margin: 6px 0 10px;
+    }
+    .score-value.LOW      { color: var(--green); }
+    .score-value.MEDIUM   { color: var(--yellow); }
+    .score-value.HIGH     { color: var(--orange); }
+    .score-value.CRITICAL { color: var(--critical); }
+
+    .progress-track {
+      height: 10px;
+      background: var(--surface2);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 10px;
+      transition: width 1s ease;
+    }
+    .progress-fill.LOW      { background: var(--green); }
+    .progress-fill.MEDIUM   { background: var(--yellow); }
+    .progress-fill.HIGH     { background: var(--orange); }
+    .progress-fill.CRITICAL { background: linear-gradient(90deg, var(--red), var(--critical)); }
+
+    /* Recommendation box */
+    .rec-box {
+      margin-top: 20px;
+      background: var(--surface2);
+      border-left: 4px solid;
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .rec-box.LOW      { border-color: var(--green); }
+    .rec-box.MEDIUM   { border-color: var(--yellow); }
+    .rec-box.HIGH     { border-color: var(--orange); }
+    .rec-box.CRITICAL { border-color: var(--critical); }
+    .rec-box strong { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+
+    /* Pills / tags */
+    .pill-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: 'Consolas', monospace;
+    }
+    .pill.perm  { border-color: #58a6ff44; color: var(--accent); }
+    .pill.log   { border-color: #3fb95044; color: var(--green); }
+    .pill.empty { color: var(--muted); font-style: italic; font-family: inherit; font-weight: 400; }
+
+    /* Attack cards */
+    .attack-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+    }
+    .attack-card {
+      background: var(--surface2);
+      border: 1px solid #f8514922;
+      border-left: 4px solid var(--red);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .attack-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--red);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .attack-card p {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* Two-column results layout */
+    .results-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media(max-width: 700px) { .results-cols { grid-template-columns: 1fr; } }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 32px 20px;
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">🔐</div>
+  <div>
+    <h1><span>CCRIP</span> — Cloud Credential Risk Intelligence Platform</h1>
+    <p>Analyze leaked AWS credentials · Detect attack paths · Score risk severity</p>
+  </div>
+  <div class="badge">MSc Project</div>
+</header>
+
+<!-- ── Main ──────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Input card -->
+  <div class="card">
+    <div class="card-title"><span class="icon">🔑</span> Credential Input</div>
+    <div class="form-grid">
+      <div class="field">
+        <label>AWS Access Key ID</label>
+        <input id="access_key" type="text" placeholder="AKIAIOSFODNN7EXAMPLE" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label>AWS Secret Access Key</label>
+        <input id="secret_key" type="password" placeholder="wJalrXUtnFEMI/K7MDENG..." autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>IAM Username</label>
+        <input id="username" type="text" placeholder="john-dev" autocomplete="off" />
+      </div>
+    </div>
+    <button class="btn-analyze" id="analyzeBtn" onclick="runAnalysis()">
+      🔍 &nbsp; Analyze Credential
+    </button>
+  </div>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <p>Connecting to AWS and analyzing credential…</p>
+  </div>
+
+  <!-- Error banner -->
+  <div id="error-banner">
+    <span style="font-size:18px">⚠️</span>
+    <span id="error-text"></span>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+
+    <!-- Risk summary -->
+    <div class="card">
+      <div class="card-title"><span class="icon">🚨</span> Risk Assessment</div>
+      <div class="risk-hero">
+        <div class="risk-badge" id="riskBadge">—</div>
+        <div class="risk-meter">
+          <label>Risk Score</label>
+          <div class="score-value" id="scoreValue">0</div>
+          <div class="progress-track">
+            <div class="progress-fill" id="progressFill" style="width:0%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px">
+            <span style="font-size:11px;color:var(--muted)">0 — Low</span>
+            <span style="font-size:11px;color:var(--muted)">100 — Critical</span>
+          </div>
+        </div>
+      </div>
+      <div class="rec-box" id="recBox">
+        <strong>Recommended Action</strong>
+        <span id="recText"></span>
+      </div>
+    </div>
+
+    <!-- Permissions + Activity -->
+    <div class="results-cols">
+      <div class="card">
+        <div class="card-title"><span class="icon">🛡️</span> IAM Permissions Detected</div>
+        <div class="pill-list" id="permsList"></div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> Observed Activity (Logs)</div>
+        <div class="pill-list" id="activityList"></div>
+      </div>
+    </div>
+
+    <!-- Attack paths -->
+    <div class="card">
+      <div class="card-title"><span class="icon">⚔️</span> Possible Attack Paths</div>
+      <div class="attack-grid" id="attackGrid"></div>
+    </div>
+
+  </div><!-- /results -->
+
+</main>
+
+<footer>
+  CCRIP &nbsp;·&nbsp; Cloud Credential Risk Intelligence Platform &nbsp;·&nbsp; MSc Project &nbsp;·&nbsp;
+  Never store real credentials in source code &nbsp;·&nbsp; IAM data fetched via read-only boto3 call
+</footer>
+
+<!-- ── Script ─────────────────────────────────────────────────────────────── -->
+<script>
+  const API = 'http://127.0.0.1:5000/analyze';
+
+  async function runAnalysis() {
+    const accessKey = document.getElementById('access_key').value.trim();
+    const secretKey = document.getElementById('secret_key').value.trim();
+    const username  = document.getElementById('username').value.trim();
+
+    // ── Basic client-side validation ───────────────────────────────────
+    if (!accessKey || !secretKey || !username) {
+      showError('Please fill in all three fields before analyzing.');
+      return;
+    }
+
+    // ── Reset UI ───────────────────────────────────────────────────────
+    hideError();
+    showLoader(true);
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('analyzeBtn').disabled = true;
+
+    // ── Call the backend ───────────────────────────────────────────────
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_key: accessKey,
+          secret_key: secretKey,
+          username:   username
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.error || `Server error ${res.status}`);
+        return;
+      }
+
+      renderResults(data);
+
+    } catch (err) {
+      showError('Could not reach the backend. Make sure the Flask server is running on http://127.0.0.1:5000');
+    } finally {
+      showLoader(false);
+      document.getElementById('analyzeBtn').disabled = false;
+    }
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────
+  function renderResults(data) {
+    const level = data.risk_level;
+    const score = data.risk_score;
+
+    // Risk badge
+    const badge = document.getElementById('riskBadge');
+    badge.textContent = level;
+    badge.className = `risk-badge ${level}`;
+
+    // Score + progress
+    const sv = document.getElementById('scoreValue');
+    sv.textContent = score;
+    sv.className = `score-value ${level}`;
+
+    const pf = document.getElementById('progressFill');
+    pf.style.width = '0%';
+    pf.className = `progress-fill ${level}`;
+    setTimeout(() => { pf.style.width = score + '%'; }, 50);
+
+    // Recommendation
+    document.getElementById('recText').textContent = data.recommendation;
+    document.getElementById('recBox').className = `rec-box ${level}`;
+
+    // Permissions
+    const permsList = document.getElementById('permsList');
+    permsList.innerHTML = '';
+    if (data.permissions.length === 0) {
+      permsList.innerHTML = '<span class="pill empty">No permissions detected</span>';
+    } else {
+      data.permissions.forEach(p => {
+        permsList.innerHTML += `<span class="pill perm">${p}</span>`;
+      });
+    }
+
+    // Activity
+    const actList = document.getElementById('activityList');
+    actList.innerHTML = '';
+    if (data.activity.length === 0) {
+      actList.innerHTML = '<span class="pill empty">No activity found</span>';
+    } else {
+      data.activity.forEach(a => {
+        actList.innerHTML += `<span class="pill log">${a}</span>`;
+      });
+    }
+
+    // Attack paths
+    const grid = document.getElementById('attackGrid');
+    grid.innerHTML = '';
+    if (data.attack_paths.length === 0) {
+      grid.innerHTML = '<p style="color:var(--muted);font-size:14px">No attack paths identified.</p>';
+    } else {
+      data.attack_paths.forEach(ap => {
+        grid.innerHTML += `
+          <div class="attack-card">
+            <h4>⚡ ${escHtml(ap.attack)}</h4>
+            <p>${escHtml(ap.description)}</p>
+          </div>`;
+      });
+    }
+
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  function showLoader(on) {
+    document.getElementById('loader').style.display = on ? 'block' : 'none';
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-banner');
+    document.getElementById('error-text').textContent = msg;
+    el.style.display = 'flex';
+  }
+
+  function hideError() {
+    document.getElementById('error-banner').style.display = 'none';
+  }
+
+  // Prevent XSS when injecting API response text into the DOM
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Allow pressing Enter in any field to trigger analysis
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') runAnalysis();
+  });
+</script>
+
+</body>
+</html>
