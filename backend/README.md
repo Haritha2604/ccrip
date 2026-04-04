@@ -70,6 +70,12 @@ User enters a GitHub repo URL in the browser
       e.g. "s3:GetObject" -> S3_ACCESS
               |
               v
+      [ cloudtrail_fetcher.py ]
+      Tries AWS CloudTrail LookupEvents (real logs)
+      Falls back to mock_logs.json if key lacks permission,
+      is inactive, or has no secret
+              |
+              v
       [ intelligence.py ]
       Builds activity timeline
       Classifies intent (Recon / Exploitation / Exfiltration)
@@ -116,7 +122,7 @@ User enters a GitHub repo URL in the browser
 | Risk Scoring | Additive 0–100 score  LOW / MEDIUM / HIGH / CRITICAL |
 | Decision Engine | P1-P4 priority with specific, ordered remediation steps |
 | Web Dashboard | Dark-themed UI with 7-tab per-credential breakdown |
-| Mock CloudTrail | Simulates API activity logs (replaces real CloudTrail for demo purposes) |
+| CloudTrail Integration | Fetches real CloudTrail logs per credential (falls back to mock logs if the key lacks permission) |
 
 ---
 
@@ -130,7 +136,7 @@ User enters a GitHub repo URL in the browser
 | GitHub API | requests (REST v3) |
 | Frontend | Plain HTML + CSS + JavaScript (no framework) |
 | AWS services used | IAM (read-only), STS (free) — no paid services |
-| Activity data | Local `mock_logs.json` (CloudTrail simulation) |
+| Activity data | Real AWS CloudTrail `LookupEvents` with `mock_logs.json` as fallback |
 
 ---
 
@@ -147,12 +153,13 @@ ccrip/
 |   +-- validator.py             # STS credential validation (ACTIVE/INACTIVE)
 |   +-- aws_connector.py         # IAM policy fetcher (real AWS)
 |   +-- permission_analyzer.py   # IAM JSON -> permission labels
+|   +-- cloudtrail_fetcher.py    # Real CloudTrail LookupEvents with mock fallback
 |   +-- intelligence.py          # Timeline, intent, anomaly detection
 |   +-- attack_engine.py         # 6 rule-based attack simulations
 |   +-- correlation.py           # Multi-credential cross-analysis
 |   +-- risk_engine.py           # 0-100 risk score + level
 |   +-- decision_engine.py       # Priority + remediation steps
-|   +-- mock_logs.json           # Simulated CloudTrail activity
+|   +-- mock_logs.json           # Fallback CloudTrail activity (used when real logs unavailable)
 |   +-- requirements.txt         # Python dependencies
 |   +-- README.md                # This file
 |
@@ -291,7 +298,7 @@ Expected response: `{"status": "ok"}`
 | Credential Cards | One expandable card per unique credential |
 | Location tab | Which file and line number the key was found |
 | Validation tab | ACTIVE / INACTIVE status from AWS STS |
-| Permissions tab | IAM labels + observed activity from mock logs |
+| Permissions tab | IAM labels + observed activity; shows ✅ Real CloudTrail or ⚠️ Mock Logs badge with reason |
 | Intelligence tab | Attack timeline, intent classification, anomaly alerts |
 | Attacks tab | Attack paths an adversary could take |
 | Risk tab | Score (0-100) + level + recommendation |
@@ -344,7 +351,9 @@ Scans a GitHub repository and returns a full risk report.
         "reason": "Credential is valid and currently active."
       },
       "permissions": ["IAM_ACCESS", "S3_ACCESS"],
-      "activity": ["s3:ListBucket", "iam:CreateUser"],
+      "activity":   ["s3:ListBucket", "iam:CreateUser"],
+      "log_source":  "cloudtrail",
+      "log_note":    "Fetched 2 real CloudTrail events for this key.",
       "intelligence": {
         "timeline": [{ "step": 1, "action": "s3:ListBucket", "phase": "Reconnaissance" }],
         "intent": ["Reconnaissance", "Persistence"],
@@ -426,6 +435,7 @@ Liveness check. Returns `{"status": "ok"}` if the server is running.
 | Validation | `validator.py` | Calls `sts:GetCallerIdentity` — the only free AWS call that confirms if a key is still active |
 | Enrichment | `aws_connector.py` | For active keys only — fetches the actual IAM managed policies from AWS |
 | Permission Processing | `permission_analyzer.py` | Converts raw IAM JSON statements into labels like `S3_ACCESS`, `IAM_ACCESS`, `FULL_ACCESS` |
+| Activity Fetch | `cloudtrail_fetcher.py` | Calls `cloudtrail:LookupEvents` to retrieve real activity logs for the key; falls back to `mock_logs.json` if denied, key is inactive, or no secret key is available; returns `source` field so the UI can display a real vs mock badge |
 | Intelligence | `intelligence.py` | Builds a timeline, classifies intent (Reconnaissance/Exploitation/Exfiltration/Persistence), flags anomalies |
 | Attack Simulation | `attack_engine.py` | Runs 6 rule checks — if IAM_ACCESS is present, Privilege Escalation fires; if S3_ACCESS, Data Exfiltration fires; etc. |
 | Correlation | `correlation.py` | Groups credentials by AWS account ID, detects shared risks when multiple keys are found |

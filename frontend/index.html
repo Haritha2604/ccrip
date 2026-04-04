@@ -436,8 +436,16 @@ function buildValidationPanel(cred) {
 }
 
 function buildPermissionsPanel(cred) {
-  const perms = cred.permissions || [];
-  const act   = cred.activity    || [];
+  const perms  = cred.permissions || [];
+  const act    = cred.activity    || [];
+  const source = cred.log_source  || 'mock';
+  const note   = cred.log_note    || '';
+
+  // Badge: green = real CloudTrail, yellow = mock fallback
+  const srcBadge = source === 'cloudtrail'
+    ? `<span style="background:#0d2318;color:var(--green);border:1px solid #3fb95044;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;">✅ Real CloudTrail</span>`
+    : `<span style="background:#2a1f00;color:var(--yellow);border:1px solid #d2992244;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;">⚠️ Mock Logs</span>`;
+
   return `
     <div style="margin-bottom:16px">
       <div class="section-label">IAM Permissions (from AWS)</div>
@@ -446,7 +454,10 @@ function buildPermissionsPanel(cred) {
         : '<span class="pill empty">No permissions — key inactive or IAM access denied</span>'}</div>
     </div>
     <div>
-      <div class="section-label">Observed Activity (CloudTrail logs)</div>
+      <div class="section-label" style="display:flex;align-items:center;gap:10px;">
+        Observed Activity &nbsp;${srcBadge}
+      </div>
+      ${note ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 10px;">${esc(note)}</p>` : ''}
       <div class="pill-list">${act.map(a=>`<span class="pill log">${esc(a)}</span>`).join('')}</div>
     </div>`;
 }

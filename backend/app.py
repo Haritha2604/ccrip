@@ -16,26 +16,25 @@ from typing import Optional
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
+from ccrip_logger import get_logger
+log = get_logger(__name__)
+
 # Pipeline modules
-from scanner            import scan_github_repo
-from ingestion          import normalize_and_deduplicate
-from validator          import validate_credential
-from aws_connector      import get_user_policies
-from permission_analyzer import extract_permissions
-from intelligence       import analyze_intelligence
-from attack_engine      import simulate_attacks
-from correlation        import correlate_credentials
-from risk_engine        import calculate_risk
-from decision_engine    import make_decision
+from scanner              import scan_github_repo
+from ingestion            import normalize_and_deduplicate
+from validator            import validate_credential
+from aws_connector        import get_user_policies
+from permission_analyzer  import extract_permissions
+from cloudtrail_fetcher   import fetch_activity
+from intelligence         import analyze_intelligence
+from attack_engine        import simulate_attacks
+from correlation          import correlate_credentials
+from risk_engine          import calculate_risk
+from decision_engine      import make_decision
 
 # App setup
 app = Flask(__name__)
 CORS(app)
-
-# Load mock CloudTrail activity once at startup
-_LOGS_PATH = os.path.join(os.path.dirname(__file__), "mock_logs.json")
-with open(_LOGS_PATH, encoding="utf-8") as _f:
-    MOCK_ACTIVITY: list[str] = json.load(_f)
 
 _RISK_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -49,32 +48,50 @@ def _username_from_arn(arn: Optional[str]) -> Optional[str]:
 
 def _analyze_credential(access_key: str, secret_key: Optional[str], occurrences: list[dict]) -> dict:
     """Run the full analysis pipeline on a single credential."""
+    safe_key = access_key[:8] + "..."
+    log.info("[PIPELINE] Analyzing credential %s (has_secret=%s, occurrences=%d)",
+             safe_key, bool(secret_key), len(occurrences))
 
     # Validation
+    log.debug("[VALIDATE] Calling STS GetCallerIdentity for %s", safe_key)
     validation = validate_credential(access_key, secret_key)
+    log.info("[VALIDATE] %s → status=%s", safe_key, validation['status'])
 
     # Enrichment (IAM policies, only for ACTIVE credentials)
     permissions: list[str] = []
     if validation["status"] == "ACTIVE" and secret_key:
         username = _username_from_arn(validation.get("arn"))
         if username:
+            log.debug("[IAM] Fetching policies for user '%s' (%s)", username, safe_key)
             try:
                 policy_docs = get_user_policies(access_key, secret_key, username)
                 permissions = extract_permissions(policy_docs)
-            except ValueError:
+                log.info("[IAM] %s permissions found: %s", safe_key, permissions)
+            except ValueError as exc:
+                log.warning("[IAM] Could not fetch policies for %s: %s", safe_key, exc)
                 permissions = []
+        else:
+            log.warning("[IAM] Could not extract username from ARN for %s", safe_key)
 
-    # Activity (mock CloudTrail)
-    activity = MOCK_ACTIVITY
+    # Activity — try real CloudTrail first, fall back to mock logs
+    log.debug("[CLOUDTRAIL] Fetching activity for %s", safe_key)
+    log_result   = fetch_activity(access_key, secret_key)
+    activity     = log_result["activity"]
+    log_source   = log_result["source"]   # "cloudtrail" or "mock"
+    log_note     = log_result["note"]
+    log.info("[CLOUDTRAIL] %s → source=%s | %s", safe_key, log_source, log_note)
 
     # Intelligence Analysis
     intelligence = analyze_intelligence(activity)
 
     # Attack Simulation
     attack_paths = simulate_attacks(permissions, activity)
+    log.info("[ATTACK] %s → %d attack path(s): %s", safe_key, len(attack_paths),
+             [a['attack'] for a in attack_paths])
 
     # Risk Scoring
     risk = calculate_risk(permissions, activity)
+    log.info("[RISK] %s → score=%s level=%s", safe_key, risk['score'], risk['level'])
 
     # Adjust risk down for inactive credentials
     if validation["status"] == "INACTIVE":
@@ -94,6 +111,8 @@ def _analyze_credential(access_key: str, secret_key: Optional[str], occurrences:
         "occurrences":    occurrences,
         "validation":     validation,
         "permissions":    permissions,
+        "log_source":     log_source,
+        "log_note":       log_note,
         "activity":       activity,
         "intelligence":   intelligence,
         "attack_paths":   attack_paths,
@@ -119,21 +138,29 @@ def scan():
     github_token = (body.get("github_token") or "").strip() or None
 
     if not repo_url:
+        log.warning("[SCAN] Request rejected: missing repo_url")
         return jsonify({"error": "'repo_url' is required."}), 400
 
     if not repo_url.startswith("https://github.com/"):
+        log.warning("[SCAN] Request rejected: invalid repo URL '%s'", repo_url)
         return jsonify({"error": "Only GitHub repositories are supported. URL must start with 'https://github.com/'."}), 400
+
+    log.info("[SCAN] ===== New scan request: %s =====", repo_url)
 
     # Step 1: Scan
     try:
         scan_result = scan_github_repo(repo_url, github_token)
     except ValueError as exc:
+        log.error("[SCAN] Scan failed (invalid input) for %s: %s", repo_url, exc)
         return jsonify({"error": str(exc)}), 400
     except Exception as exc:
+        log.error("[SCAN] Scan failed unexpectedly for %s: %s", repo_url, exc, exc_info=True)
         return jsonify({"error": f"Scan failed: {exc}"}), 500
 
     # Step 2: Ingestion
     records = normalize_and_deduplicate(scan_result["credentials"])
+    log.info("[SCAN] %s → files_scanned=%d, raw_findings=%d, unique_credentials=%d",
+             repo_url, scan_result['files_scanned'], len(scan_result['credentials']), len(records))
 
     # Steps 3-10: Analyze each credential
     analyzed: list[dict] = []
@@ -156,6 +183,8 @@ def scan():
             overall_risk = level
 
     active_count = sum(1 for c in analyzed if c["validation"]["status"] == "ACTIVE")
+    log.info("[SCAN] ===== Scan complete: %s | overall_risk=%s | active=%d/%d =====",
+             repo_url, overall_risk, active_count, len(analyzed))
 
     return jsonify({
         "repo": repo_url,
