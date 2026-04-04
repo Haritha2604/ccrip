@@ -15,6 +15,9 @@ from typing import Optional
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
+from ccrip_logger import get_logger
+log = get_logger(__name__)
+
 
 def validate_credential(access_key: str, secret_key: Optional[str]) -> dict:
     """
@@ -31,6 +34,8 @@ def validate_credential(access_key: str, secret_key: Optional[str]) -> dict:
     """
     # We cannot validate without the secret key
     if not secret_key:
+        log.warning("[VALIDATE] %s... → NO_SECRET (no secret key in repo)",
+                    access_key[:8])
         return {
             'status':     'NO_SECRET',
             'account_id': None,
@@ -50,7 +55,8 @@ def validate_credential(access_key: str, secret_key: Optional[str]) -> dict:
             region_name='us-east-1',
         )
         identity = sts.get_caller_identity()
-
+        log.info("[VALIDATE] %s... → ACTIVE | account=%s arn=%s",
+                 access_key[:8], identity.get('Account'), identity.get('Arn'))
         return {
             'status':     'ACTIVE',
             'account_id': identity.get('Account'),
@@ -61,6 +67,8 @@ def validate_credential(access_key: str, secret_key: Optional[str]) -> dict:
 
     except ClientError as exc:
         code = exc.response['Error']['Code']
+        log.warning("[VALIDATE] %s... → INACTIVE | AWS error code=%s",
+                    access_key[:8], code)
 
         if code in ('InvalidClientTokenId', 'AuthFailure', 'SignatureDoesNotMatch'):
             return {
@@ -80,6 +88,8 @@ def validate_credential(access_key: str, secret_key: Optional[str]) -> dict:
         }
 
     except NoCredentialsError:
+        log.error("[VALIDATE] %s... → NoCredentialsError (boto3 could not find credentials)",
+                  access_key[:8])
         return {
             'status':     'INACTIVE',
             'account_id': None,

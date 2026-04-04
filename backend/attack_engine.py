@@ -12,6 +12,9 @@ Rules are plain Python conditions — easy to read and extend.
 
 from typing import NamedTuple
 
+from ccrip_logger import get_logger
+log = get_logger(__name__)
+
 
 class AttackRule(NamedTuple):
     """A single detection rule."""
@@ -144,10 +147,14 @@ def simulate_attacks(permissions: list[str], activity: list[str]) -> list[dict]:
     triggered = []
 
     for check_fn, rule in RULES:
-        if check_fn(permissions, activity):
+        fired = check_fn(permissions, activity)
+        log.debug("[ATTACK] Rule '%s' fired=%s", rule.name, fired)
+        if fired:
             triggered.append({
                 "attack": rule.name,
                 "description": rule.description,
             })
 
+    log.info("[ATTACK] %d/%d attack rule(s) triggered: %s",
+             len(triggered), len(RULES), [a["attack"] for a in triggered])
     return triggered

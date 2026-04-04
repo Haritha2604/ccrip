@@ -15,6 +15,9 @@ import requests
 from dataclasses import dataclass
 from typing import Optional
 
+from ccrip_logger import get_logger
+log = get_logger(__name__)
+
 # ── AWS credential regex patterns ─────────────────────────────────────────────
 
 # AWS Access Key: starts with AKIA (long-term) or ASIA (temporary/STS)
@@ -131,8 +134,12 @@ def _fetch_content(owner: str, repo: str, path: str, branch: str) -> Optional[st
     url = f'https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}'
     try:
         resp = requests.get(url, timeout=10)
-        return resp.text if resp.status_code == 200 else None
-    except requests.RequestException:
+        if resp.status_code == 200:
+            return resp.text
+        log.debug("[SCANNER] Skipped %s (HTTP %s)", path, resp.status_code)
+        return None
+    except requests.RequestException as exc:
+        log.warning("[SCANNER] Failed to fetch %s: %s", path, exc)
         return None
 
 
@@ -213,17 +220,25 @@ def scan_github_repo(repo_url: str, github_token: Optional[str] = None) -> dict:
 
     # Filter and cap the file list
     to_scan = [f for f in all_files if _should_scan(f['path'])][:MAX_FILES]
+    log.info("[SCANNER] Repo=%s branch=%s total_files=%d scannable=%d",
+             repo_url, branch, len(all_files), len(to_scan))
 
     credentials: list[LeakedCredential] = []
     files_scanned = 0
 
     for entry in to_scan:
+        log.debug("[SCANNER] Scanning file: %s", entry['path'])
         content = _fetch_content(owner, repo, entry['path'], branch)
         if content is None:
             continue
         files_scanned += 1
-        credentials.extend(_scan_content(content, entry['path']))
+        found = _scan_content(content, entry['path'])
+        if found:
+            log.info("[SCANNER] Found %d credential(s) in %s", len(found), entry['path'])
+        credentials.extend(found)
 
+    log.info("[SCANNER] Done. files_scanned=%d total_credentials=%d",
+             files_scanned, len(credentials))
     return {
         'repo':          repo_url,
         'branch':        branch,

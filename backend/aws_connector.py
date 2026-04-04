@@ -10,6 +10,9 @@ Only IAM read operations are used — no paid services involved.
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
+from ccrip_logger import get_logger
+log = get_logger(__name__)
+
 
 def get_user_policies(access_key: str, secret_key: str, username: str) -> list[dict]:
     """
@@ -23,6 +26,7 @@ def get_user_policies(access_key: str, secret_key: str, username: str) -> list[d
 
     # Build a scoped IAM client — no default profile is touched
     try:
+        log.debug("[IAM] Building boto3 IAM client for user '%s' (%s...)", username, access_key[:8])
         iam = boto3.client(
             "iam",
             aws_access_key_id=access_key,
@@ -30,6 +34,7 @@ def get_user_policies(access_key: str, secret_key: str, username: str) -> list[d
             region_name="us-east-1",
         )
     except Exception as exc:
+        log.error("[IAM] Failed to initialise AWS client for %s...: %s", access_key[:8], exc)
         raise ValueError(f"Failed to initialise AWS client: {exc}") from exc
 
     policies = []
@@ -54,6 +59,8 @@ def get_user_policies(access_key: str, secret_key: str, username: str) -> list[d
     except ClientError as exc:
         error_code = exc.response["Error"]["Code"]
         error_msg = exc.response["Error"]["Message"]
+        log.error("[IAM] ClientError for user '%s' (%s...): code=%s msg=%s",
+                  username, access_key[:8], error_code, error_msg)
 
         if error_code in ("InvalidClientTokenId", "AuthFailure", "SignatureDoesNotMatch"):
             raise ValueError("Invalid AWS credentials provided.") from exc
@@ -65,11 +72,14 @@ def get_user_policies(access_key: str, secret_key: str, username: str) -> list[d
 
         if error_code == "NoSuchEntity":
             # User does not exist — return empty list rather than crashing
+            log.warning("[IAM] User '%s' not found in AWS account", username)
             return []
 
         raise ValueError(f"AWS error [{error_code}]: {error_msg}") from exc
 
     except NoCredentialsError as exc:
+        log.error("[IAM] NoCredentialsError for %s...", access_key[:8])
         raise ValueError("No AWS credentials supplied.") from exc
 
+    log.info("[IAM] Fetched %d policy document(s) for user '%s'", len(policies), username)
     return policies
