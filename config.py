@@ -1,7 +1,7 @@
 import boto3
 
-AWS_ACCESS_KEY_ID     = "AKIAV2J4G5C6GG6PWEOO"
-AWS_SECRET_ACCESS_KEY = "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"
+AWS_ACCESS_KEY_ID     = ""
+AWS_SECRET_ACCESS_KEY = ""
 AWS_REGION            = "ap-south-1"
 
 s3 = boto3.client(
