@@ -10,7 +10,8 @@ When a repository leaks more than one credential, this module:
      how an attacker could chain the credentials together
 """
 
-
+from ccrip_logger import get_logger
+log = get_logger(__name__)
 def correlate_credentials(analyzed: list[dict]) -> dict:
     """
     Cross-correlate all analyzed credentials.
@@ -28,6 +29,7 @@ def correlate_credentials(analyzed: list[dict]) -> dict:
         }
     """
     if not analyzed:
+        log.warning("[CORRELATE] No credentials to correlate")
         return {
             'accounts':           {},
             'shared_risks':       [],
@@ -35,7 +37,7 @@ def correlate_credentials(analyzed: list[dict]) -> dict:
             'attack_graph_edges': [],
             'summary':            'No credentials to correlate.',
         }
-
+    log.info("[CORRELATE] Correlating %d credential(s)", len(analyzed))
     # ── 1. Group by AWS account ───────────────────────────────────────────────
     accounts: dict[str, list[str]] = {}
     for cred in analyzed:
@@ -105,6 +107,12 @@ def correlate_credentials(analyzed: list[dict]) -> dict:
     )
     if shared_risks:
         summary += f' {len(shared_risks)} cross-credential risk(s) identified.'
+
+    if shared_risks:
+        for r in shared_risks:
+            log.warning("[CORRELATE] Shared risk: %s", r)
+    log.info("[CORRELATE] Done — %d account(s), %d shared risk(s)",
+             len(real_accounts), len(shared_risks))
 
     return {
         'accounts':           accounts,

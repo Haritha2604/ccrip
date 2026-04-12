@@ -1,0 +1,198 @@
+┌──────────────────────────────────────────────────────────────┐
+│                    EXTERNAL INPUT SOURCES                    │
+│──────────────────────────────────────────────────────────────│
+│  • Gitleaks (Secret Scanning Tool)                          │
+│  • AWS CloudTrail (API Activity Logs)                       │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Gitleaks CLI, AWS CloudTrail                         │
+│  Comment:                                                   │
+│  → Detects leaked AWS credentials from repositories         │
+│  → Captures real-time usage of those credentials            │
+└──────────────┬───────────────────────────────┬───────────────┘
+               │                               │
+               ▼                               ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                    EVENT TRIGGER LAYER                       │
+│──────────────────────────────────────────────────────────────│
+│  • EventBridge rule filters CloudTrail events               │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Amazon EventBridge                                   │
+│  Comment:                                                   │
+│  → Acts as real-time event router                           │
+│  → Triggers pipeline instantly on suspicious activity       │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                EXECUTION LAYER (ENTRY POINT)                 │
+│──────────────────────────────────────────────────────────────│
+│  • AWS Lambda Function                                       │
+│──────────────────────────────────────────────────────────────│
+│  Tech: AWS Lambda + Python (boto3)                          │
+│  Comment:                                                   │
+│  → First compute layer                                      │
+│  → Extracts AccessKeyId + event details                     │
+│  → Sends structured payload to backend                      │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                    BACKEND / INGESTION LAYER                 │
+│──────────────────────────────────────────────────────────────│
+│  • Normalize incoming data                                  │
+│  • Store events                                             │
+│  • Remove duplicates                                        │
+│──────────────────────────────────────────────────────────────│
+│  Tech: FastAPI, Python, PostgreSQL / DynamoDB               │
+│  Comment:                                                   │
+│  → Central processing entry                                 │
+│  → Prepares clean structured data for analysis              │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                    VALIDATION LAYER                          │
+│──────────────────────────────────────────────────────────────│
+│  • Validate credential status                               │
+│  • Identify IAM entity                                      │
+│──────────────────────────────────────────────────────────────│
+│  Tech: AWS STS (GetCallerIdentity)                          │
+│  Comment:                                                   │
+│  → Confirms if key is ACTIVE / INACTIVE                     │
+│  → Prevents unnecessary processing                          │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                    ENRICHMENT LAYER                          │
+│──────────────────────────────────────────────────────────────│
+│  • Fetch IAM policies (Admin account)                       │
+│  • Collect CloudTrail history                               │
+│  • Extract metadata (IP, region, timestamps)                │
+│──────────────────────────────────────────────────────────────│
+│  Tech: boto3 (IAM, CloudTrail APIs)                         │
+│  Comment:                                                   │
+│  → Builds full context around credential                    │
+│  → Enables deep analysis                                    │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│        PERMISSION + RESOURCE ANALYSIS (CORE ENGINE)          │
+│──────────────────────────────────────────────────────────────│
+│  • Expand wildcard permissions (s3:*, iam:*)                │
+│  • Map actions → specific AWS resources                     │
+│  • Identify sensitive permissions                           │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Custom Python Engine                                 │
+│  Comment:                                                   │
+│  → Converts IAM policies into explicit access               │
+│  → Example Output:                                          │
+│     Service: S3                                             │
+│     Action: GetObject                                       │
+│     Resource: finance-data bucket                           │
+│  → Critical for precise risk understanding                  │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                ACTIVITY ANALYSIS LAYER                       │
+│──────────────────────────────────────────────────────────────│
+│  • Analyze API calls timeline                               │
+│  • Detect sensitive operations                              │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Python (pandas / rule-based engine)                  │
+│  Comment:                                                   │
+│  → Answers: What actions were performed?                    │
+│  → Detects privilege escalation attempts                    │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                ANOMALY DETECTION LAYER                       │
+│──────────────────────────────────────────────────────────────│
+│  • Detect unusual behavior                                  │
+│  • New IP / Region                                          │
+│  • High-frequency API calls                                 │
+│  • Dormant key activation                                   │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Rule-based logic (ML optional)                       │
+│  Comment:                                                   │
+│  → Identifies suspicious usage patterns                     │
+│  → Differentiates attacker vs normal usage                  │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                DEPENDENCY ANALYSIS LAYER                     │
+│──────────────────────────────────────────────────────────────│
+│  • Detect persistence mechanisms                            │
+│  • New IAM users / roles                                    │
+│  • New access keys                                          │
+│  • Policy attachments                                       │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Python + IAM API analysis                            │
+│  Comment:                                                   │
+│  → Detects if attacker established long-term access         │
+│  → Critical for cleanup strategy                            │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│          BLAST RADIUS CALCULATION (CORE FEATURE)             │
+│──────────────────────────────────────────────────────────────│
+│  • Calculate impact scope                                   │
+│  • Services affected                                        │
+│  • Resource count                                           │
+│  • Permission level                                         │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Rule-based scoring engine                            │
+│  Comment:                                                   │
+│  → Estimates total damage potential                         │
+│  → Example: IAM Full Access → HIGH                          │
+│  → Output: LOW / MEDIUM / HIGH                              │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                     RISK ENGINE                              │
+│──────────────────────────────────────────────────────────────│
+│  • Compute final risk score                                 │
+│  • Risk = Permission + Activity + Anomaly + Blast Radius     │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Custom Python scoring logic                          │
+│  Comment:                                                   │
+│  → Quantifies severity                                      │
+│  → Enables prioritization of multiple keys                  │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                   DECISION ENGINE                            │
+│──────────────────────────────────────────────────────────────│
+│  • Rank compromised credentials                             │
+│  • Assign priority (LOW / HIGH / CRITICAL)                  │
+│  • Suggest remediation                                      │
+│──────────────────────────────────────────────────────────────│
+│  Tech: Rule-based engine / FastAPI                          │
+│  Comment:                                                   │
+│  → Converts analysis into actions                           │
+│  → Avoids breaking dependent services                       │
+└──────────────────────────┬───────────────────────────────────┘
+                           ▼
+
+┌──────────────────────────────────────────────────────────────┐
+│                      OUTPUT LAYER                            │
+│──────────────────────────────────────────────────────────────│
+│  • Risk Score + Confidence                                  │
+│  • Blast Radius                                             │
+│  • Affected Resources                                       │
+│  • Detected Actions                                         │
+│  • Recommended Fixes                                        │
+│──────────────────────────────────────────────────────────────│
+│  Tech: JSON API, Dashboard (React optional)                 │
+│  Comment:                                                   │
+│  → Final actionable intelligence                            │
+│  → Enables fast incident response                           │
+└──────────────────────────────────────────────────────────────┘

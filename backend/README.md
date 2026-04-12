@@ -49,10 +49,11 @@ User enters a GitHub repo URL in the browser
       [ scanner.py ]
       Scans every source file in the repo
       looking for AKIA.../ASIA... key patterns
+      (Simulates Gitleaks secret scanning)
               |
               v
       [ ingestion.py ]
-      Removes duplicate findings
+      Normalizes and removes duplicate findings
       (same key found in multiple files)
               |
               v
@@ -66,25 +67,44 @@ User enters a GitHub repo URL in the browser
               |
               v
       [ permission_analyzer.py ]
-      Converts policy JSON into simple labels
-      e.g. "s3:GetObject" -> S3_ACCESS
+      Converts policy JSON into permission labels (e.g. IAM_ACCESS)
+      AND maps actions to specific AWS resource types
+      (expands wildcards like s3:* into individual operations)
               |
               v
       [ cloudtrail_fetcher.py ]
-      Tries AWS CloudTrail LookupEvents (real logs)
-      Falls back to mock_logs.json if key lacks permission,
-      is inactive, or has no secret
+      Tries real CloudTrail LookupEvents (fetches IP, region, timestamps)
+      Falls back to mock_logs.json if key lacks permission
               |
               v
-      [ intelligence.py ]
-      Builds activity timeline
-      Classifies intent (Recon / Exploitation / Exfiltration)
-      Detects anomalies in behaviour
+      [ event_trigger.py ]  -- EVENT TRIGGER LAYER
+      Simulates Amazon EventBridge rule evaluation
+      Applies 5 rules: Sensitive IAM, Data Exfil, Privilege Escalation,
+      High-Frequency Calls, Cross-Service Lateral Movement
+      Also simulates AWS Lambda payload extraction
+              |
+              v
+      [ intelligence.py ]  -- ACTIVITY + ANOMALY DETECTION
+      Builds activity timeline + classifies intent
+      Detects anomalies: new IP/region, high-frequency calls,
+      dormant key reactivation (from real CloudTrail metadata)
+              |
+              v
+      [ dependency_analyzer.py ]  -- DEPENDENCY ANALYSIS
+      Detects persistence mechanisms:
+      new IAM users, new access keys, policy attachments, new roles
+      Determines if cleanup is required before disabling the key
               |
               v
       [ attack_engine.py ]
       Runs 6 rule-based attack simulations
-      e.g. IAM_ACCESS -> Privilege Escalation attack possible
+      e.g. IAM_ACCESS -> Privilege Escalation possible
+              |
+              v
+      [ blast_radius.py ]  -- BLAST RADIUS (CORE FEATURE)
+      Calculates total damage potential:
+      services affected, resource types at risk, permission level
+      Produces blast radius score (0-20) and level (LOW/MEDIUM/HIGH)
               |
               v
       [ correlation.py ]  (when multiple credentials found)
@@ -93,8 +113,8 @@ User enters a GitHub repo URL in the browser
               |
               v
       [ risk_engine.py ]
-      Calculates score 0-100
-      Maps to LOW / MEDIUM / HIGH / CRITICAL
+      Risk = Permission(0-40) + Activity(0-25) + Anomaly(0-15) + Blast Radius(0-20)
+      Maps total score to LOW / MEDIUM / HIGH / CRITICAL
               |
               v
       [ decision_engine.py ]
@@ -115,14 +135,18 @@ User enters a GitHub repo URL in the browser
 | Credential Deduplication | Same key found in multiple files is analysed only once |
 | STS Validation | Uses `GetCallerIdentity` to confirm if the key is still active (free API call) |
 | IAM Enrichment | Fetches real attached policies for active credentials via boto3 |
-| Permission Labels | Maps raw IAM actions to readable labels (`IAM_ACCESS`, `S3_ACCESS`, etc.) |
+| Permission + Resource Analysis | Maps raw IAM actions to labels AND to specific AWS resource types; expands wildcards |
+| CloudTrail Integration | Fetches real CloudTrail logs per credential; extracts IP, region, timestamps; falls back to mock |
+| Event Trigger Layer | Simulates Amazon EventBridge (5 rules) + AWS Lambda payload extraction |
 | Intelligence Analysis | Timeline reconstruction, intent classification, anomaly detection |
+| Anomaly Detection | IP/region change, high-frequency API calls, dormant key reactivation (from CloudTrail metadata) |
+| Dependency Analysis | Detects persistence: new IAM users, new access keys, policy attachments, new roles |
 | Attack Simulation | 6 rule-based attacks: Privilege Escalation, Data Exfiltration, Persistence, Lateral Movement, Secret Access, Role Abuse |
+| **Blast Radius Calculation** | **Core feature** — services affected, resource types at risk, permission level, score (0-20) |
 | Correlation Engine | Groups credentials by AWS account, detects shared risks and chained attacks |
-| Risk Scoring | Additive 0–100 score  LOW / MEDIUM / HIGH / CRITICAL |
+| Risk Scoring | Risk = Permission(40) + Activity(25) + Anomaly(15) + Blast Radius(20) = max 100 |
 | Decision Engine | P1-P4 priority with specific, ordered remediation steps |
-| Web Dashboard | Dark-themed UI with 7-tab per-credential breakdown |
-| CloudTrail Integration | Fetches real CloudTrail logs per credential (falls back to mock logs if the key lacks permission) |
+| Web Dashboard | Dark-themed UI with 9-tab per-credential breakdown |
 
 ---
 
@@ -147,18 +171,22 @@ ccrip/
 |
 +-- backend/
 |   |
-|   +-- app.py                   # Flask server — orchestrates the pipeline
+|   +-- app.py                   # Flask server — orchestrates the full pipeline
 |   +-- scanner.py               # GitHub repo scanner (Gitleaks-style regex)
 |   +-- ingestion.py             # Deduplicates raw findings
 |   +-- validator.py             # STS credential validation (ACTIVE/INACTIVE)
 |   +-- aws_connector.py         # IAM policy fetcher (real AWS)
-|   +-- permission_analyzer.py   # IAM JSON -> permission labels
-|   +-- cloudtrail_fetcher.py    # Real CloudTrail LookupEvents with mock fallback
-|   +-- intelligence.py          # Timeline, intent, anomaly detection
+|   +-- permission_analyzer.py   # IAM JSON -> labels + resource type mapping
+|   +-- cloudtrail_fetcher.py    # Real CloudTrail LookupEvents with mock fallback + metadata
+|   +-- event_trigger.py         # Simulates EventBridge rules + Lambda payload extraction
+|   +-- intelligence.py          # Timeline, intent, anomaly detection (incl. IP/region/frequency)
+|   +-- dependency_analyzer.py   # Persistence mechanism detection
 |   +-- attack_engine.py         # 6 rule-based attack simulations
+|   +-- blast_radius.py          # Blast radius calculation (core feature)
 |   +-- correlation.py           # Multi-credential cross-analysis
-|   +-- risk_engine.py           # 0-100 risk score + level
+|   +-- risk_engine.py           # 4-component risk scoring (0-100)
 |   +-- decision_engine.py       # Priority + remediation steps
+|   +-- ccrip_logger.py          # Centralised logging (logs/ccrip.log)
 |   +-- mock_logs.json           # Fallback CloudTrail activity (used when real logs unavailable)
 |   +-- requirements.txt         # Python dependencies
 |   +-- README.md                # This file
@@ -298,10 +326,12 @@ Expected response: `{"status": "ok"}`
 | Credential Cards | One expandable card per unique credential |
 | Location tab | Which file and line number the key was found |
 | Validation tab | ACTIVE / INACTIVE status from AWS STS |
-| Permissions tab | IAM labels + observed activity; shows ✅ Real CloudTrail or ⚠️ Mock Logs badge with reason |
-| Intelligence tab | Attack timeline, intent classification, anomaly alerts |
-| Attacks tab | Attack paths an adversary could take |
-| Risk tab | Score (0-100) + level + recommendation |
+| Permissions tab | IAM permission labels + action→resource mapping table + observed activity badge (Real/Mock) |
+| Intelligence tab | Attack timeline, intent classification, anomaly alerts, real CloudTrail metadata (IP/region/time) |
+| Dependencies tab | Persistence mechanisms detected: new IAM users, access keys, policy attachments, new roles |
+| Attacks tab | 6 rule-based attack paths + EventBridge rules that would fire in production |
+| Blast Radius tab | Damage potential: score (0-20), level (LOW/MEDIUM/HIGH), services + resource types affected |
+| Risk tab | Composite score breakdown (Permission + Activity + Anomaly + Blast Radius) + recommendation |
 | Decision tab | Priority (P1-P4) + specific remediation steps |
 | Correlation panel | Shared risks when multiple credentials are found |
 
@@ -430,51 +460,65 @@ Liveness check. Returns `{"status": "ok"}` if the server is running.
 
 | Layer | File | What it does |
 |---|---|---|
-| External Input | `scanner.py` | Regex-scans every file in the GitHub repo for `AKIA...` / `ASIA...` patterns and nearby secret keys |
+| External Input | `scanner.py` | Regex-scans every file in the GitHub repo for `AKIA...` / `ASIA...` patterns |
 | Ingestion | `ingestion.py` | Groups findings by access key, removes duplicates, picks the best secret key found |
-| Validation | `validator.py` | Calls `sts:GetCallerIdentity` — the only free AWS call that confirms if a key is still active |
+| Validation | `validator.py` | Calls `sts:GetCallerIdentity` — free AWS call that confirms if a key is still active |
 | Enrichment | `aws_connector.py` | For active keys only — fetches the actual IAM managed policies from AWS |
-| Permission Processing | `permission_analyzer.py` | Converts raw IAM JSON statements into labels like `S3_ACCESS`, `IAM_ACCESS`, `FULL_ACCESS` |
-| Activity Fetch | `cloudtrail_fetcher.py` | Calls `cloudtrail:LookupEvents` to retrieve real activity logs for the key; falls back to `mock_logs.json` if denied, key is inactive, or no secret key is available; returns `source` field so the UI can display a real vs mock badge |
-| Intelligence | `intelligence.py` | Builds a timeline, classifies intent (Reconnaissance/Exploitation/Exfiltration/Persistence), flags anomalies |
-| Attack Simulation | `attack_engine.py` | Runs 6 rule checks — if IAM_ACCESS is present, Privilege Escalation fires; if S3_ACCESS, Data Exfiltration fires; etc. |
+| Permission + Resource Analysis | `permission_analyzer.py` | Converts raw IAM JSON into labels (`IAM_ACCESS` etc.) AND produces a detailed action→resource type mapping; expands wildcards like `s3:*` |
+| Activity Fetch | `cloudtrail_fetcher.py` | Calls `cloudtrail:LookupEvents`; extracts IP address, AWS region, and timestamps from each event; falls back to mock logs |
+| Event Trigger | `event_trigger.py` | Simulates Amazon EventBridge — applies 5 detection rules (Sensitive IAM, Data Exfil, Privilege Escalation, High-Frequency, Cross-Service); also simulates AWS Lambda payload extraction |
+| Activity Analysis | `intelligence.py` | Builds a timeline, classifies intent (Reconnaissance / Exploitation / Exfiltration / Persistence) |
+| Anomaly Detection | `intelligence.py` | Flags: new IP/region from CloudTrail metadata, high-frequency API calls, dormant key reactivation, classic breach patterns |
+| Dependency Analysis | `dependency_analyzer.py` | Detects persistence mechanisms in activity logs: new IAM users, new access keys, policy attachments, new roles; determines if cleanup is needed before disabling |
+| Attack Simulation | `attack_engine.py` | Runs 6 rule checks — if IAM_ACCESS, Privilege Escalation fires; if S3_ACCESS, Data Exfiltration fires; etc. |
+| **Blast Radius** | **`blast_radius.py`** | **Calculates total damage potential: services affected, resource types at risk, permission level. Produces score 0-20 fed into Risk Engine** |
 | Correlation | `correlation.py` | Groups credentials by AWS account ID, detects shared risks when multiple keys are found |
-| Risk Engine | `risk_engine.py` | Adds weighted points per permission label and per log action; caps at 100; bands into LOW/MEDIUM/HIGH/CRITICAL |
+| Risk Engine | `risk_engine.py` | Risk = Permission(0-40) + Activity(0-25) + Anomaly(0-15) + Blast Radius(0-20); total max 100; bands into LOW/MEDIUM/HIGH/CRITICAL |
 | Decision Engine | `decision_engine.py` | Maps risk level to P1-P4 priority; adds specific remediation steps based on which attacks fired |
-| Output | `app.py` + `index.html` | Combines all results into one JSON response, rendered as an interactive web dashboard |
+| Output | `app.py` + `index.html` | Combines all results into one JSON response, rendered as 9-tab interactive web dashboard |
 
 ---
 
 ## 11. Risk Scoring System
 
+### Risk formula (updated)
+
+```
+Risk Score = Permission Score + Activity Score + Anomaly Score + Blast Radius Score
+```
+
+### Points per component
+
+| Component | Max Points | What it measures |
+|---|---|---|
+| Permission | 40 | Which IAM permissions the key carries |
+| Activity | 25 | Which risky API actions were observed |
+| Anomaly | 15 | How many behavioural anomalies were detected (5 pts each) |
+| Blast Radius | 20 | Damage potential from blast_radius.py |
+| **Total** | **100** | |
+
 ### Points per permission label
 
 | Label | Points |
 |---|---|
-| FULL_ACCESS | +60 |
-| IAM_ACCESS | +40 |
-| STS_ACCESS | +25 |
-| SECRETS_ACCESS | +25 |
-| KMS_ACCESS | +20 |
-| EC2_ACCESS | +15 |
-| S3_ACCESS | +15 |
-| LAMBDA_ACCESS | +15 |
-| RDS_ACCESS | +15 |
-| DYNAMODB_ACCESS | +10 |
+| FULL_ACCESS | 40 |
+| IAM_ACCESS | 34 |
+| STS_ACCESS | 22 |
+| SECRETS_ACCESS | 22 |
+| KMS_ACCESS | 18 |
+| EC2_ACCESS | 14 |
+| S3_ACCESS | 14 |
+| LAMBDA_ACCESS | 14 |
+| RDS_ACCESS | 12 |
+| DYNAMODB_ACCESS | 8 |
 
-### Points per log action (mock CloudTrail)
+### Blast Radius levels
 
-| Action | Points |
-|---|---|
-| iam:CreateUser | +30 |
-| iam:AttachUserPolicy | +25 |
-| iam:CreateAccessKey | +25 |
-| sts:AssumeRole | +20 |
-| secretsmanager:GetSecretValue | +20 |
-| s3:DeleteObject | +15 |
-| ec2:RunInstances | +15 |
-| s3:GetObject | +10 |
-| s3:PutObject | +10 |
+| Score | Level | Meaning |
+|---|---|---|
+| 14–20 | HIGH | Administrator or IAM-level access |
+| 8–13 | MEDIUM | Access to sensitive or compute services |
+| 0–7 | LOW | Limited or no permissions identified |
 
 ### Risk bands
 

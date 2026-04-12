@@ -10,7 +10,8 @@ module returns:
   3. A dependency warning if disabling the key could break live services
 """
 
-# ── Priority labels ───────────────────────────────────────────────────────────
+from ccrip_logger import get_logger
+log = get_logger(__name__)# ── Priority labels ───────────────────────────────────────────────────────────
 
 PRIORITY_MAP = {
     'CRITICAL': 'P1 — Respond Immediately (within 1 hour)',
@@ -96,12 +97,13 @@ def make_decision(risk_level: str, validation: dict, attack_paths: list[dict]) -
         }
     """
     priority = PRIORITY_MAP.get(risk_level, PRIORITY_MAP['LOW'])
-
+    log.info("[DECISION] risk_level=%s → priority=%s", risk_level, priority)
     # Start with the base steps for this risk level
     steps: list[str] = list(BASE_STEPS.get(risk_level, BASE_STEPS['LOW']))
 
     # Append attack-specific steps for every triggered attack path
     triggered = {ap['attack'] for ap in attack_paths}
+    log.debug("[DECISION] triggered attack paths: %s", triggered)
     for attack_name, extra in ATTACK_SPECIFIC_STEPS.items():
         if attack_name in triggered:
             steps.extend(extra)
