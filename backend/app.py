@@ -24,10 +24,13 @@ from scanner              import scan_github_repo
 from ingestion            import normalize_and_deduplicate
 from validator            import validate_credential
 from aws_connector        import get_user_policies
-from permission_analyzer  import extract_permissions
+from permission_analyzer  import extract_permissions, get_resource_analysis
 from cloudtrail_fetcher   import fetch_activity
 from intelligence         import analyze_intelligence
 from attack_engine        import simulate_attacks
+from blast_radius         import calculate_blast_radius
+from dependency_analyzer  import analyze_dependencies
+from event_trigger        import evaluate_event_rules, extract_lambda_payload
 from correlation          import correlate_credentials
 from risk_engine          import calculate_risk
 from decision_engine      import make_decision
@@ -52,20 +55,22 @@ def _analyze_credential(access_key: str, secret_key: Optional[str], occurrences:
     log.info("[PIPELINE] Analyzing credential %s (has_secret=%s, occurrences=%d)",
              safe_key, bool(secret_key), len(occurrences))
 
-    # Validation
+    # ── Validation ────────────────────────────────────────────────────────────
     log.debug("[VALIDATE] Calling STS GetCallerIdentity for %s", safe_key)
     validation = validate_credential(access_key, secret_key)
     log.info("[VALIDATE] %s → status=%s", safe_key, validation['status'])
 
-    # Enrichment (IAM policies, only for ACTIVE credentials)
+    # ── Enrichment: IAM policies ──────────────────────────────────────────────
     permissions: list[str] = []
+    resource_analysis: list[dict] = []
     if validation["status"] == "ACTIVE" and secret_key:
         username = _username_from_arn(validation.get("arn"))
         if username:
             log.debug("[IAM] Fetching policies for user '%s' (%s)", username, safe_key)
             try:
                 policy_docs = get_user_policies(access_key, secret_key, username)
-                permissions = extract_permissions(policy_docs)
+                permissions       = extract_permissions(policy_docs)
+                resource_analysis = get_resource_analysis(policy_docs)
                 log.info("[IAM] %s permissions found: %s", safe_key, permissions)
             except ValueError as exc:
                 log.warning("[IAM] Could not fetch policies for %s: %s", safe_key, exc)
@@ -73,27 +78,44 @@ def _analyze_credential(access_key: str, secret_key: Optional[str], occurrences:
         else:
             log.warning("[IAM] Could not extract username from ARN for %s", safe_key)
 
-    # Activity — try real CloudTrail first, fall back to mock logs
+    # ── Activity — real CloudTrail first, mock fallback ───────────────────────
     log.debug("[CLOUDTRAIL] Fetching activity for %s", safe_key)
-    log_result   = fetch_activity(access_key, secret_key)
-    activity     = log_result["activity"]
-    log_source   = log_result["source"]   # "cloudtrail" or "mock"
-    log_note     = log_result["note"]
+    log_result = fetch_activity(access_key, secret_key)
+    activity   = log_result["activity"]
+    metadata   = log_result.get("metadata", [])   # IP, region, timestamps
+    log_source = log_result["source"]
+    log_note   = log_result["note"]
     log.info("[CLOUDTRAIL] %s → source=%s | %s", safe_key, log_source, log_note)
 
-    # Intelligence Analysis
-    intelligence = analyze_intelligence(activity)
+    # ── Event Trigger (simulates EventBridge + Lambda) ────────────────────────
+    event_trigger  = evaluate_event_rules(activity)
+    lambda_payload = extract_lambda_payload(access_key, validation, activity)
 
-    # Attack Simulation
+    # ── Intelligence Analysis + Anomaly Detection ─────────────────────────────
+    intelligence = analyze_intelligence(activity, metadata)
+
+    # ── Attack Simulation ─────────────────────────────────────────────────────
     attack_paths = simulate_attacks(permissions, activity)
     log.info("[ATTACK] %s → %d attack path(s): %s", safe_key, len(attack_paths),
              [a['attack'] for a in attack_paths])
 
-    # Risk Scoring
-    risk = calculate_risk(permissions, activity)
-    log.info("[RISK] %s → score=%s level=%s", safe_key, risk['score'], risk['level'])
+    # ── Dependency Analysis ───────────────────────────────────────────────────
+    dependency_analysis = analyze_dependencies(permissions, activity)
 
-    # Adjust risk down for inactive credentials
+    # ── Blast Radius Calculation ──────────────────────────────────────────────
+    blast_radius = calculate_blast_radius(permissions, activity)
+
+    # ── Risk Engine: Permission + Activity + Anomaly + Blast Radius ───────────
+    risk = calculate_risk(
+        permissions,
+        activity,
+        anomalies=intelligence["anomalies"],
+        blast_radius_score=blast_radius["score"],
+    )
+    log.info("[RISK] %s → score=%s level=%s breakdown=%s",
+             safe_key, risk['score'], risk['level'], risk['score_breakdown'])
+
+    # ── Adjust risk down for inactive credentials ─────────────────────────────
     if validation["status"] == "INACTIVE":
         risk["score"]          = max(10, risk["score"] - 30)
         risk["level"]          = "LOW" if risk["score"] < 15 else risk["level"]
@@ -102,24 +124,30 @@ def _analyze_credential(access_key: str, secret_key: Optional[str], occurrences:
             "Verify it is fully deleted and remove it from the codebase."
         )
 
-    # Decision
+    # ── Decision Engine ───────────────────────────────────────────────────────
     decision = make_decision(risk["level"], validation, attack_paths)
 
     return {
-        "access_key":     access_key,
-        "has_secret":     bool(secret_key),
-        "occurrences":    occurrences,
-        "validation":     validation,
-        "permissions":    permissions,
-        "log_source":     log_source,
-        "log_note":       log_note,
-        "activity":       activity,
-        "intelligence":   intelligence,
-        "attack_paths":   attack_paths,
-        "risk_score":     risk["score"],
-        "risk_level":     risk["level"],
-        "recommendation": risk["recommendation"],
-        "decision":       decision,
+        "access_key":          access_key,
+        "has_secret":          bool(secret_key),
+        "occurrences":         occurrences,
+        "validation":          validation,
+        "permissions":         permissions,
+        "resource_analysis":   resource_analysis,
+        "log_source":          log_source,
+        "log_note":            log_note,
+        "activity":            activity,
+        "intelligence":        intelligence,
+        "event_trigger":       event_trigger,
+        "lambda_payload":      lambda_payload,
+        "attack_paths":        attack_paths,
+        "dependency_analysis": dependency_analysis,
+        "blast_radius":        blast_radius,
+        "risk_score":          risk["score"],
+        "risk_level":          risk["level"],
+        "risk_breakdown":      risk["score_breakdown"],
+        "recommendation":      risk["recommendation"],
+        "decision":            decision,
     }
 
 

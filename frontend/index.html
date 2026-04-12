@@ -137,14 +137,48 @@
     /* Correlation */
     .shared-risk{background:#2d1515;border-left:4px solid var(--red);border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:8px;font-size:13px;color:#f8888a;line-height:1.5}
 
-    /* Results hidden by default */
-    #results{display:none}
+    /* Section label */
+    .section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:12px}
 
     /* Footer */
     footer{text-align:center;color:var(--muted);font-size:12px;padding:28px 20px;border-top:1px solid var(--border);margin-top:8px}
 
-    /* Section label */
-    .section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:12px}
+    /* Blast radius level badges */
+    .br-badge{display:inline-block;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700}
+    .br-badge.HIGH  {background:#2d0a0a;color:var(--critical);border:1px solid #ff6b6b44}
+    .br-badge.MEDIUM{background:#2a1500;color:var(--orange);border:1px solid #f0883e44}
+    .br-badge.LOW   {background:#0d2318;color:var(--green);border:1px solid #3fb95044}
+
+    /* Resource analysis table */
+    .res-table{width:100%;border-collapse:collapse;font-size:12px}
+    .res-table th{text-align:left;padding:6px 10px;color:var(--muted);font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+    .res-table td{padding:7px 10px;border-bottom:1px solid #21262d;line-height:1.4}
+    .res-table tr:last-child td{border-bottom:none}
+    .sensitive-row td{color:var(--red)}
+    .normal-row   td{color:var(--text)}
+
+    /* Event trigger rules */
+    .rule-card{background:var(--surface2);border-left:4px solid var(--yellow);border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:8px;font-size:13px;line-height:1.5}
+    .rule-id{font-family:'Consolas',monospace;font-size:11px;font-weight:700;color:var(--yellow);display:block;margin-bottom:3px}
+    .rule-name{font-weight:700;color:var(--text);margin-bottom:4px}
+    .rule-desc{color:var(--muted);font-size:12px}
+
+    /* Dependency mechanisms */
+    .mech-card{background:var(--surface2);border-left:4px solid var(--orange);border-radius:0 6px 6px 0;padding:10px 14px;margin-bottom:8px;font-size:13px;line-height:1.5}
+    .dep-flag{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;margin:4px}
+    .dep-flag.yes{border-color:#f85149;color:var(--red)}
+    .dep-flag.no {color:var(--muted)}
+
+    /* Score breakdown bar */
+    .score-component{display:grid;grid-template-columns:120px 1fr 36px;align-items:center;gap:10px;margin-bottom:8px;font-size:12px}
+    .score-bar-wrap{height:8px;background:var(--surface2);border-radius:8px;overflow:hidden}
+    .score-bar-fill{height:100%;border-radius:8px;transition:width 1s ease}
+
+    /* Metadata events table */
+    .meta-table{width:100%;border-collapse:collapse;font-size:12px}
+    .meta-table th{text-align:left;padding:5px 8px;color:var(--muted);font-size:11px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+    .meta-table td{padding:5px 8px;border-bottom:1px solid #21262d;font-family:'Consolas',monospace;font-size:11px}
+    .meta-table tr:last-child td{border-bottom:none}
   </style>
 </head>
 <body>
@@ -361,7 +395,9 @@ function buildCredCard(cred, idx) {
         <div class="cred-tab" onclick="showTab(${idx},'val',this)"> Validation</div>
         <div class="cred-tab" onclick="showTab(${idx},'perm',this)"> Permissions</div>
         <div class="cred-tab" onclick="showTab(${idx},'intel',this)"> Intelligence</div>
+        <div class="cred-tab" onclick="showTab(${idx},'dep',this)"> Dependencies</div>
         <div class="cred-tab" onclick="showTab(${idx},'attack',this)"> Attacks</div>
+        <div class="cred-tab" onclick="showTab(${idx},'blast',this)"> Blast Radius</div>
         <div class="cred-tab" onclick="showTab(${idx},'risk',this)"> Risk</div>
         <div class="cred-tab" onclick="showTab(${idx},'decision',this)"> Decision</div>
       </div>
@@ -386,9 +422,19 @@ function buildCredCard(cred, idx) {
         ${buildIntelPanel(cred)}
       </div>
 
+      <!-- Dependencies tab -->
+      <div class="cred-panel" id="tab-${idx}-dep">
+        ${buildDependencyPanel(cred)}
+      </div>
+
       <!-- Attack paths tab -->
       <div class="cred-panel" id="tab-${idx}-attack">
         ${buildAttackPanel(cred)}
+      </div>
+
+      <!-- Blast Radius tab -->
+      <div class="cred-panel" id="tab-${idx}-blast">
+        ${buildBlastRadiusPanel(cred)}
       </div>
 
       <!-- Risk tab -->
@@ -398,6 +444,8 @@ function buildCredCard(cred, idx) {
 
       <!-- Decision tab -->
       <div class="cred-panel" id="tab-${idx}-decision">
+        ${buildDecisionPanel(cred)}
+      </div>
         ${buildDecisionPanel(cred)}
       </div>
     </div>`;
@@ -464,9 +512,9 @@ function buildPermissionsPanel(cred) {
 
 function buildIntelPanel(cred) {
   const intel = cred.intelligence || {};
-  const intentHtml = (intel.intent||[]).map(i=>`<span class="pill intent">${esc(i)}</span>`).join('');
-  const anomalyHtml = (intel.anomalies||[]).map(a=>`<div class="anomaly"> ${esc(a)}</div>`).join('');
-  const tlHtml = (intel.timeline||[]).map(t=>`
+  const intentHtml   = (intel.intent||[]).map(i=>`<span class="pill intent">${esc(i)}</span>`).join('');
+  const anomalyHtml  = (intel.anomalies||[]).map(a=>`<div class="anomaly"> ${esc(a)}</div>`).join('');
+  const tlHtml       = (intel.timeline||[]).map(t=>`
     <div class="tl-item">
       <div class="tl-step">${t.step}</div>
       <div>
@@ -474,6 +522,28 @@ function buildIntelPanel(cred) {
         <div class="tl-phase">${esc(t.phase)}</div>
       </div>
     </div>`).join('');
+
+  // Metadata events from real CloudTrail
+  const metaEvents = intel.metadata_events || [];
+  let metaHtml = '';
+  if (metaEvents.length > 0) {
+    const rows = metaEvents.map(m => `
+      <tr>
+        <td>${esc(m.action||'\u2014')}</td>
+        <td>${esc(m.timestamp||'\u2014')}</td>
+        <td>${esc(m.source_ip||'\u2014')}</td>
+        <td>${esc(m.region||'\u2014')}</td>
+      </tr>`).join('');
+    metaHtml = `
+      <div style="margin-top:16px">
+        <div class="section-label">Real CloudTrail Event Metadata (IP / Region / Timestamp)</div>
+        <table class="meta-table">
+          <thead><tr><th>Action</th><th>Timestamp</th><th>Source IP</th><th>Region</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
   return `
     <div style="margin-bottom:16px">
       <div class="section-label">Detected Intent</div>
@@ -486,28 +556,157 @@ function buildIntelPanel(cred) {
     <div>
       <div class="section-label">Activity Timeline</div>
       <div class="timeline">${tlHtml}</div>
+    </div>
+    ${metaHtml}`;
+}
+
+function buildDependencyPanel(cred) {
+  const dep = cred.dependency_analysis || {};
+  const mechs = dep.mechanisms || [];
+
+  const flags = [
+    { label: 'New IAM Users',      key: 'new_iam_users' },
+    { label: 'New Access Keys',    key: 'new_access_keys' },
+    { label: 'Policy Attachments', key: 'policy_attachments' },
+    { label: 'New IAM Roles',       key: 'new_roles' },
+  ];
+  const flagsHtml = flags.map(f =>
+    `<span class="dep-flag ${dep[f.key] ? 'yes' : 'no'}">
+       ${dep[f.key] ? '\u26a0\ufe0f' : '\u2713'} ${f.label}
+     </span>`
+  ).join('');
+
+  const mechHtml = mechs.length
+    ? mechs.map(m => `
+        <div class="mech-card">
+          <span style="font-family:'Consolas',monospace;font-size:11px;color:var(--orange);display:block;margin-bottom:3px">${esc(m.action)}</span>
+          <span style="font-size:13px;color:var(--text)">${esc(m.description)}</span>
+        </div>`).join('')
+    : '<p style="color:var(--muted);font-size:13px">No persistence mechanisms detected in observed activity.</p>';
+
+  const cleanupStyle = dep.cleanup_required
+    ? 'background:#2d1515;border-left:4px solid var(--red);border-radius:0 6px 6px 0;padding:12px 14px;font-size:13px;color:var(--red);margin-bottom:14px;line-height:1.5'
+    : 'background:#0d2318;border-left:4px solid var(--green);border-radius:0 6px 6px 0;padding:12px 14px;font-size:13px;color:var(--green);margin-bottom:14px;line-height:1.5';
+
+  return `
+    <div style="${cleanupStyle}">
+      ${dep.cleanup_required ? '\u26a0\ufe0f' : '\u2705'} ${esc(dep.summary||'No dependency analysis available.')}
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="section-label">Persistence Indicators</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">${flagsHtml}</div>
+    </div>
+    <div>
+      <div class="section-label">Detected Mechanisms</div>
+      ${mechHtml}
     </div>`;
 }
 
-function buildAttackPanel(cred) {
+function buildBlastRadiusPanel(cred) {
+  const br = cred.blast_radius || {};
+  const level = br.level || 'LOW';
+  const score = br.score || 0;
+  const services   = br.services_affected || [];
+  const resources  = br.resource_types    || [];
+  const permLevel  = br.permission_level  || 'N/A';
+  const color = {HIGH:'var(--critical)',MEDIUM:'var(--orange)',LOW:'var(--green)'}[level]||'var(--muted)';
+
+  const svcHtml = services.length
+    ? services.map(s=>`<span class="pill perm">${esc(s)}</span>`).join('')
+    : '<span class="pill empty">No services affected</span>';
+
+  const resHtml = resources.length
+    ? resources.map(r=>`<span class="pill log">${esc(r)}</span>`).join('')
+    : '<span class="pill empty">No resource types identified</span>';
+
+  return `
+    <div style="display:flex;align-items:center;gap:24px;margin-bottom:20px;flex-wrap:wrap">
+      <div style="text-align:center">
+        <div style="font-size:52px;font-weight:900;color:${color};line-height:1">${score}</div>
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">/ 20 pts</div>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:4px">Blast Radius</div>
+        <span class="br-badge ${level}">${level}</span>
+        <div style="margin-top:10px;height:10px;background:var(--surface2);border-radius:10px;overflow:hidden">
+          <div style="height:100%;width:${(score/20)*100}%;background:${color};border-radius:10px;transition:width 1s ease"></div>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border-left:4px solid ${color};border-radius:0 6px 6px 0;padding:12px 16px;font-size:13px;margin-bottom:16px;line-height:1.5">
+      <strong style="display:block;font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Permission Level</strong>
+      ${esc(permLevel)}
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="section-label">Services Affected</div>
+      <div class="pill-list">${svcHtml}</div>
+    </div>
+    <div>
+      <div class="section-label">AWS Resource Types at Risk</div>
+      <div class="pill-list">${resHtml}</div>
+    </div>`;
+}
   const paths = cred.attack_paths || [];
-  if (!paths.length) return '<p style="color:var(--muted);font-size:13px">No attack paths identified.</p>';
-  return `<div class="attack-grid">${paths.map(ap=>`
-    <div class="attack-card">
-      <h4> ${esc(ap.attack)}</h4>
-      <p>${esc(ap.description)}</p>
-    </div>`).join('')}</div>`;
+  const et    = cred.event_trigger || {};
+  const rules = et.triggered_rules || [];
+
+  const attackHtml = paths.length
+    ? `<div class="attack-grid">${paths.map(ap=>`
+        <div class="attack-card">
+          <h4> ${esc(ap.attack)}</h4>
+          <p>${esc(ap.description)}</p>
+        </div>`).join('')}</div>`
+    : '<p style="color:var(--muted);font-size:13px">No attack paths identified.</p>';
+
+  const triggerHtml = rules.length
+    ? rules.map(r => `
+        <div class="rule-card">
+          <span class="rule-id">${esc(r.rule_id)}</span>
+          <div class="rule-name">${esc(r.name)}</div>
+          <div class="rule-desc">${esc(r.description)}</div>
+        </div>`).join('')
+    : `<p style="color:var(--muted);font-size:13px">${esc(et.trigger_reason||'No EventBridge rules triggered.')}</p>`;
+
+  return `
+    <div style="margin-bottom:20px">
+      <div class="section-label">Simulated Attack Paths</div>
+      ${attackHtml}
+    </div>
+    <div>
+      <div class="section-label" style="display:flex;align-items:center;gap:8px">
+         EventBridge Rules Triggered
+        <span style="font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(simulated — production trigger layer)</span>
+      </div>
+      ${triggerHtml}
+    </div>`;
 }
 
 function buildRiskPanel(cred) {
-  const level = cred.risk_level;
-  const score = cred.risk_score;
+  const level     = cred.risk_level;
+  const score     = cred.risk_score;
+  const breakdown = cred.risk_breakdown || {};
   const color = {LOW:'var(--green)',MEDIUM:'var(--yellow)',HIGH:'var(--orange)',CRITICAL:'var(--critical)'}[level]||'var(--muted)';
+
+  const components = [
+    { label: 'Permission',   value: breakdown.permission   || 0, max: 40, color: '#58a6ff' },
+    { label: 'Activity',     value: breakdown.activity     || 0, max: 25, color: '#3fb950' },
+    { label: 'Anomaly',      value: breakdown.anomaly      || 0, max: 15, color: '#d29922' },
+    { label: 'Blast Radius', value: breakdown.blast_radius || 0, max: 20, color: '#f85149' },
+  ];
+  const barsHtml = components.map(c => `
+    <div class="score-component">
+      <span style="color:var(--muted)">${c.label}</span>
+      <div class="score-bar-wrap">
+        <div class="score-bar-fill" style="width:${(c.value/c.max)*100}%;background:${c.color}"></div>
+      </div>
+      <span style="font-weight:700;color:${c.color};text-align:right">${c.value}</span>
+    </div>`).join('');
+
   return `
     <div style="display:flex;align-items:center;gap:24px;margin-bottom:16px;flex-wrap:wrap">
       <div style="text-align:center">
         <div style="font-size:52px;font-weight:900;color:${color};line-height:1">${score}</div>
-        <div style="font-size:12px;color:var(--muted)">/ 100</div>
+        <div style="font-size:12px;color:var(--muted)">&sol; 100</div>
       </div>
       <div style="flex:1;min-width:200px">
         <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:6px">Risk Level</div>
@@ -516,6 +715,10 @@ function buildRiskPanel(cred) {
           <div id="prog-${cred.access_key}" style="height:100%;width:0;background:${color};border-radius:10px;transition:width 1s ease"></div>
         </div>
       </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="section-label">Score Breakdown — Risk = Permission + Activity + Anomaly + Blast Radius</div>
+      ${barsHtml}
     </div>
     <div style="background:var(--surface2);border-left:4px solid ${color};border-radius:0 6px 6px 0;padding:12px 16px;font-size:13px;line-height:1.6">
       <strong style="display:block;font-size:11px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Recommendation</strong>

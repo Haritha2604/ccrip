@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from scanner import LeakedCredential
+from ccrip_logger import get_logger
+log = get_logger(__name__)
 
 
 @dataclass
@@ -31,6 +33,8 @@ def normalize_and_deduplicate(raw: list[LeakedCredential]) -> list[CredentialRec
     3. Collect all file locations as an occurrences list.
     4. Return one CredentialRecord per unique access_key.
     """
+    log.info("[INGEST] Received %d raw findings to deduplicate", len(raw))
+
     # Group by access key
     grouped: dict[str, list[LeakedCredential]] = {}
     for cred in raw:
@@ -52,6 +56,8 @@ def normalize_and_deduplicate(raw: list[LeakedCredential]) -> list[CredentialRec
             for c in group
         ]
 
+        log.debug("[INGEST] Key %s... → %d occurrence(s), has_secret=%s",
+                 access_key[:8], len(group), bool(best.secret_key))
         records.append(CredentialRecord(
             access_key=access_key,
             secret_key=best.secret_key,
@@ -59,4 +65,6 @@ def normalize_and_deduplicate(raw: list[LeakedCredential]) -> list[CredentialRec
             occurrences=occurrences,
         ))
 
+    log.info("[INGEST] Deduplicated %d raw findings → %d unique credential(s)",
+             len(raw), len(records))
     return records

@@ -54,6 +54,7 @@ def fetch_activity(access_key: str, secret_key: Optional[str]) -> dict:
         return {
             "source":   "mock",
             "activity": _MOCK_LOGS,
+            "metadata": [],
             "note":     "No secret key available — using mock logs.",
         }
 
@@ -84,6 +85,7 @@ def fetch_activity(access_key: str, secret_key: Optional[str]) -> dict:
             return {
                 "source":   "mock",
                 "activity": _MOCK_LOGS,
+                "metadata": [],
                 "note": (
                     "CloudTrail returned no events for this key "
                     "(key may be new, or no activity in the last 90 days). "
@@ -91,33 +93,59 @@ def fetch_activity(access_key: str, secret_key: Optional[str]) -> dict:
                 ),
             }
 
-        # CloudTrail returns full event dicts — extract just "service:EventName"
+        # CloudTrail returns full event dicts — extract "service:EventName" + metadata
         # EventName examples: "GetObject", "CreateUser"
         # EventSource examples: "s3.amazonaws.com", "iam.amazonaws.com"
         activity: list[str] = []
+        metadata: list[dict] = []
+
         for event in events:
             event_name   = event.get("EventName", "")
             event_source = event.get("EventSource", "")
+            event_time   = event.get("EventTime")
+
+            # Parse the nested CloudTrailEvent JSON for IP + region
+            ct_detail: dict = {}
+            raw_ct = event.get("CloudTrailEvent")
+            if raw_ct:
+                try:
+                    ct_detail = json.loads(raw_ct)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            source_ip = ct_detail.get("sourceIPAddress", "")
+            aws_region = ct_detail.get("awsRegion", "")
 
             # Convert "s3.amazonaws.com" → "s3"
             service = event_source.replace(".amazonaws.com", "")
 
             if event_name and service:
-                activity.append(f"{service}:{event_name}")
+                action = f"{service}:{event_name}"
+                activity.append(action)
+                metadata.append({
+                    "action":    action,
+                    "timestamp": event_time.isoformat() if event_time else None,
+                    "source_ip": source_ip,
+                    "region":    aws_region,
+                })
 
         # Remove duplicates while preserving order
         seen = set()
         deduplicated = []
-        for action in activity:
+        dedup_meta   = []
+        for i, action in enumerate(activity):
             if action not in seen:
                 seen.add(action)
                 deduplicated.append(action)
+                if i < len(metadata):
+                    dedup_meta.append(metadata[i])
 
         log.info("[CLOUDTRAIL] %s... → REAL logs fetched: %d unique events",
                  access_key[:8], len(deduplicated))
         return {
             "source":   "cloudtrail",
             "activity": deduplicated,
+            "metadata": dedup_meta,
             "note":     f"Fetched {len(deduplicated)} real CloudTrail events for this key.",
         }
 
@@ -139,6 +167,7 @@ def fetch_activity(access_key: str, secret_key: Optional[str]) -> dict:
         return {
             "source":   "mock",
             "activity": _MOCK_LOGS,
+            "metadata": [],
             "note":     note,
         }
 
@@ -147,6 +176,7 @@ def fetch_activity(access_key: str, secret_key: Optional[str]) -> dict:
         return {
             "source":   "mock",
             "activity": _MOCK_LOGS,
+            "metadata": [],
             "note":     "No credentials available for CloudTrail query. Using mock logs.",
         }
 
@@ -155,5 +185,6 @@ def fetch_activity(access_key: str, secret_key: Optional[str]) -> dict:
         return {
             "source":   "mock",
             "activity": _MOCK_LOGS,
+            "metadata": [],
             "note":     f"Unexpected error fetching CloudTrail: {exc}. Using mock logs.",
         }
