@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -446,8 +446,6 @@ function buildCredCard(cred, idx) {
       <div class="cred-panel" id="tab-${idx}-decision">
         ${buildDecisionPanel(cred)}
       </div>
-        ${buildDecisionPanel(cred)}
-      </div>
     </div>`;
   return wrap;
 }
@@ -646,6 +644,8 @@ function buildBlastRadiusPanel(cred) {
       <div class="pill-list">${resHtml}</div>
     </div>`;
 }
+
+function buildAttackPanel(cred) {
   const paths = cred.attack_paths || [];
   const et    = cred.event_trigger || {};
   const rules = et.triggered_rules || [];
