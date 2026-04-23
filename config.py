@@ -1,6 +1,6 @@
 import boto3
 
-AWS_ACCESS_KEY_ID     = ""
+AWS_ACCESS_KEY_ID     = "AKIAV2J4G5C6EJMDLIP3"
 AWS_SECRET_ACCESS_KEY = "
 AWS_REGION            = "ap-south-1"
 
